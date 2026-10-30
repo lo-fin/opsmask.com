@@ -1,6 +1,29 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import { SITE } from './src/config.ts';
+
+function sitemapXmlAlias() {
+  return {
+    name: 'sitemap-xml-alias',
+    hooks: {
+      'astro:build:done': async ({ dir }) => {
+        const distDir = fileURLToPath(dir);
+        const sitemap0 = path.join(distDir, 'sitemap-0.xml');
+        const sitemapIndex = path.join(distDir, 'sitemap-index.xml');
+        const sitemapTarget = path.join(distDir, 'sitemap.xml');
+
+        if (fs.existsSync(sitemap0)) {
+          fs.copyFileSync(sitemap0, sitemapTarget);
+        } else if (fs.existsSync(sitemapIndex)) {
+          fs.copyFileSync(sitemapIndex, sitemapTarget);
+        }
+      },
+    },
+  };
+}
 
 export default defineConfig({
   site: SITE.url,
@@ -24,6 +47,7 @@ export default defineConfig({
         return item;
       },
     }),
+    sitemapXmlAlias(),
   ],
   markdown: {
     shikiConfig: {
@@ -31,3 +55,4 @@ export default defineConfig({
     },
   },
 });
+
