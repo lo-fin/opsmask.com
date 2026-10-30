@@ -1,0 +1,19 @@
+name: Prompt submission
+description: Share an AI prompt you use for DevOps work
+labels: [prompt]
+body:
+  - type: input
+    id: title
+    attributes: { label: Prompt title, placeholder: "e.g. Explain a Terraform plan" }
+    validations: { required: true }
+  - type: textarea
+    id: when
+    attributes: { label: When do you use it? }
+    validations: { required: true }
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt text
+      description: Use {{variable_name}} for the parts the user fills in. Remove any real secrets or company names.
+      render: markdown
+    validations: { required: true }

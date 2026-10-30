@@ -1,0 +1,20 @@
+name: Bug report
+description: Something on the site does not work
+labels: [bug]
+body:
+  - type: input
+    id: page
+    attributes: { label: Page URL, placeholder: "https://opsmask.com/tools/..." }
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: What happened and what did you expect? }
+    validations: { required: true }
+  - type: textarea
+    id: input
+    attributes:
+      label: Sample input (remove real secrets)
+      render: text
+  - type: input
+    id: browser
+    attributes: { label: Browser and OS }

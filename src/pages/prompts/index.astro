@@ -1,0 +1,27 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+const items = await getCollection('prompts');
+const categories = [...new Set(items.map((p) => p.data.category))].sort();
+---
+<Base title="AI prompts for DevOps" description="Fill-in-the-blank AI prompts for reviewing manifests, writing queries and debugging incidents, with automatic secret masking.">
+  <h1>AI prompts</h1>
+  <p class="muted">Fill in the blanks, check the masked preview, then copy into ChatGPT, Claude or Copilot.</p>
+  {categories.map((cat) => (
+    <section class="cat">
+      <h2>{cat}</h2>
+      <ul>
+        {items.filter((p) => p.data.category === cat).map((p) => (
+          <li><a href={`/prompts/${p.id}/`}>{p.data.title}</a><span>{p.data.description}</span></li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</Base>
+<style>
+  .cat { margin-top: 2rem; }
+  .cat ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0 2rem; }
+  .cat li { padding-block: 0.65rem; border-bottom: 1px solid var(--line); }
+  .cat a { font-weight: 700; display: block; }
+  .cat span { color: var(--ink-soft); font-size: 0.93rem; }
+</style>

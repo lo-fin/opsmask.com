@@ -1,0 +1,89 @@
+---
+import Base from '../layouts/Base.astro';
+import AdSlot from './AdSlot.astro';
+import { TOOLS, TOOL_GROUPS, toolBySlug } from '../data/tools';
+import { SITE } from '../config';
+import { getCollection } from 'astro:content';
+
+interface Props { slug: string }
+const tool = toolBySlug(Astro.props.slug);
+if (!tool) throw new Error(`Unknown tool: ${Astro.props.slug}`);
+const prompts = (await getCollection('prompts')).filter(
+  (p) => tool.relatedPrompts?.includes(p.id) || p.data.relatedTools.includes(tool.slug),
+);
+const groups = TOOL_GROUPS.map((g) => ({ name: g, tools: TOOLS.filter((t) => t.group === g) })).filter((g) => g.tools.length);
+const source = `${SITE.repo}/blob/${SITE.branch}/src/pages/tools/${tool.slug}.astro`;
+---
+<Base title={tool.title} description={tool.description} wide>
+  <div class="tool-layout">
+    <nav class="side" aria-label="All tools">
+      {groups.map((g) => (
+        <div class="side-group">
+          <p>{g.name}</p>
+          <ul>
+            {g.tools.map((t) => (
+              <li><a href={`/tools/${t.slug}/`} aria-current={t.slug === tool.slug ? 'page' : undefined}>{t.title}</a></li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+
+    <article class="main">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/tools/">Tools</a> / {tool.group}</nav>
+      <h1>{tool.title}</h1>
+      <p class="lede">{tool.description}</p>
+      <p class="local"><span class="dot" aria-hidden="true"></span>Runs locally. Nothing you paste leaves this tab.</p>
+
+      <section class="tool"><slot /></section>
+
+      {prompts.length > 0 && (
+        <section class="related">
+          <h2>Ask AI about the result</h2>
+          <p class="muted">These prompts mask secrets before you copy them.</p>
+          <ul>
+            {prompts.map((p) => <li><a href={`/prompts/${p.id}/`}>{p.data.title}</a></li>)}
+          </ul>
+        </section>
+      )}
+
+      <slot name="notes" />
+      <p class="source"><a href={source} rel="noopener">View this tool’s source</a> · <a href={`${SITE.repo}/issues/new?template=bug_report.yml&title=${encodeURIComponent(`[${tool.title}] `)}`} rel="noopener">Report a problem</a></p>
+    </article>
+
+    <div class="side-ad"><AdSlot variant="sidebar" /></div>
+  </div>
+</Base>
+
+<style>
+  .tool-layout {
+    display: grid; grid-template-columns: 14rem minmax(0, 1fr); grid-template-areas: 'side main' 'ad main';
+    grid-template-rows: auto 1fr; column-gap: 3rem; align-items: start;
+  }
+  .side { grid-area: side; font-size: 0.95rem; }
+  .side-group { margin-bottom: 1.1rem; }
+  .side-group p { margin: 0 0 0.3rem; color: var(--ink-soft); font-size: 0.85rem; }
+  .side ul { list-style: none; padding: 0; margin: 0; }
+  .side a { display: block; padding: 0.3rem 0.6rem; border-left: 3px solid transparent; color: var(--ink); text-decoration: none; border-radius: 0 var(--radius-s) var(--radius-s) 0; }
+  .side a:hover { background: var(--surface); }
+  .side a[aria-current='page'] { border-left-color: var(--mask); background: var(--surface); font-weight: 700; }
+  .side-ad { grid-area: ad; position: sticky; top: 5rem; padding-top: 0.5rem; }
+  .main { grid-area: main; min-width: 0; max-width: 56rem; }
+  .crumbs { color: var(--ink-soft); font-size: 0.95rem; margin-bottom: 0.75rem; }
+  .crumbs a { color: var(--ink-soft); }
+  .lede { font-size: 1.15rem; }
+  .local { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 1.75rem; }
+  .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .tool { display: grid; gap: 1.25rem; }
+  .related { margin-top: 2.5rem; padding: 1rem 1.25rem; border-left: 4px solid var(--mask); background: var(--surface); border-radius: 0 var(--radius-m) var(--radius-m) 0; }
+  .related h2 { font-size: 1.1rem; margin-bottom: 0.2rem; }
+  .related ul { padding-left: 1.1rem; margin: 0.5rem 0 0; }
+  .source { margin-top: 2.5rem; font-size: 0.9rem; color: var(--ink-soft); }
+  .source a { color: var(--ink-soft); }
+  @media (max-width: 960px) {
+    .tool-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'main' 'ad'; }
+    .side { display: none; }
+    .side-ad { position: static; }
+    .side-ad :global(.ad) { margin-top: 2rem; max-width: 40rem; }
+  }
+</style>

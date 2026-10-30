@@ -1,0 +1,24 @@
+---
+import Base from '../../layouts/Base.astro';
+import { TOOLS, TOOL_GROUPS } from '../../data/tools';
+const groups = TOOL_GROUPS.map((g) => ({ name: g, tools: TOOLS.filter((t) => t.group === g) })).filter((g) => g.tools.length);
+---
+<Base title="Tools" description="Browser-based DevOps tools: Kubernetes, networking, encoding, cron and data formats.">
+  <h1>Tools</h1>
+  <p class="muted">Each tool works offline once the page has loaded.</p>
+  {groups.map((g) => (
+    <section class="group">
+      <h2>{g.name}</h2>
+      <ul>
+        {g.tools.map((t) => <li><a href={`/tools/${t.slug}/`}>{t.title}</a><span>{t.description}</span></li>)}
+      </ul>
+    </section>
+  ))}
+</Base>
+<style>
+  .group { margin-top: 2rem; }
+  .group ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0 2rem; }
+  .group li { padding-block: 0.65rem; border-bottom: 1px solid var(--line); }
+  .group a { font-weight: 700; display: block; }
+  .group span { color: var(--ink-soft); font-size: 0.93rem; }
+</style>

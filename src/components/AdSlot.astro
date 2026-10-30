@@ -1,0 +1,50 @@
+---
+// One ad per page, never between a tool's input and output, never a popup.
+// Height is reserved so the page does not jump when the ad loads.
+import { SITE } from '../config';
+interface Props { variant?: 'sidebar' | 'inline' }
+const { variant = 'inline' } = Astro.props;
+const { provider, carbon, ethicalads } = SITE.ads;
+const useCarbon = provider === 'carbon' && carbon.serve && carbon.placement;
+const useEA = provider === 'ethicalads' && ethicalads.publisher;
+const { kofi } = SITE.support;
+---
+<aside class:list={['ad', variant]} aria-label={useCarbon || useEA ? 'Sponsor' : 'Support OpsMask'}>
+  {useCarbon && (
+    <>
+      <p class="ad-label">Sponsor</p>
+      <div class="ad-box">
+        <script async src={`https://cdn.carbonads.com/carbon.js?serve=${carbon.serve}&placement=${carbon.placement}&format=cover`} id="_carbonads_js"></script>
+      </div>
+    </>
+  )}
+  {useEA && (
+    <>
+      <p class="ad-label">Sponsor</p>
+      <div class="ad-box">
+        <div data-ea-publisher={ethicalads.publisher} data-ea-type="image" class:list={[variant === 'sidebar' ? 'vertical' : 'horizontal']}></div>
+        <script async src="https://media.ethicalads.io/media/client/ethicalads.min.js"></script>
+      </div>
+    </>
+  )}
+  {!useCarbon && !useEA && (
+    <div class="house">
+      <p><strong>{SITE.name} is free and open source.</strong> No accounts, no tracking, no uploads.</p>
+      <p class="house-links">
+        {kofi && <a class="btn small" href={kofi} rel="noopener">Buy me a coffee</a>}
+        <a class="btn ghost small" href={SITE.repo} rel="noopener">Star on GitHub</a>
+      </p>
+    </div>
+  )}
+</aside>
+
+<style>
+  .ad { font-size: 0.9rem; }
+  .ad.inline { margin-block: 2.5rem 0; max-width: 46rem; }
+  .ad-label { margin: 0 0 0.3rem; color: var(--ink-soft); font-size: 0.8rem; }
+  .ad-box { min-height: 120px; }
+  .sidebar .ad-box { min-height: 250px; }
+  .house { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.85rem 1rem; background: var(--surface); }
+  .house p { margin: 0 0 0.6rem; }
+  .house-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 !important; }
+</style>

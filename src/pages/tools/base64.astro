@@ -1,0 +1,72 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="base64">
+  <div class="controls">
+    <label class="check"><input type="radio" name="mode" value="encode" checked /> Encode</label>
+    <label class="check"><input type="radio" name="mode" value="decode" /> Decode</label>
+    <label class="check"><input type="checkbox" id="urlsafe" /> URL-safe alphabet</label>
+    <label class="check"><input type="checkbox" id="perline" /> Each line separately</label>
+  </div>
+  <div>
+    <label for="b64-in">Input</label>
+    <textarea id="b64-in" class="code" spellcheck="false"></textarea>
+  </div>
+  <div>
+    <div class="row"><label for="b64-out">Output</label><button class="btn ghost" type="button" id="b64-copy">Copy output</button></div>
+    <textarea id="b64-out" class="code" readonly></textarea>
+    <p id="b64-err" class="status-err" aria-live="polite"></p>
+  </div>
+
+  <div slot="notes" class="prose">
+    <h2>Kubernetes Secrets</h2>
+    <p>Values under <code>data:</code> in a Secret must be Base64. Use <code>stringData:</code> instead if you want to write plain text and let the API server encode it. Watch for a trailing newline: <code>echo -n</code> avoids it.</p>
+    <pre><code set:text={`echo -n 'my-value' | base64
+kubectl get secret app-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d`} /></pre>
+  </div>
+</ToolShell>
+
+<script>
+  const inp = document.getElementById('b64-in') as HTMLTextAreaElement;
+  const out = document.getElementById('b64-out') as HTMLTextAreaElement;
+  const err = document.getElementById('b64-err')!;
+  const urlsafe = document.getElementById('urlsafe') as HTMLInputElement;
+  const perline = document.getElementById('perline') as HTMLInputElement;
+
+  const enc = (s: string) => {
+    const bytes = new TextEncoder().encode(s);
+    let bin = '';
+    bytes.forEach((b) => (bin += String.fromCharCode(b)));
+    let r = btoa(bin);
+    if (urlsafe.checked) r = r.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return r;
+  };
+  const dec = (s: string) => {
+    let b = s.trim().replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    b = b.padEnd(Math.ceil(b.length / 4) * 4, '=');
+    const bytes = Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  };
+
+  function run() {
+    err.textContent = '';
+    const mode = (document.querySelector('input[name="mode"]:checked') as HTMLInputElement).value;
+    const fn = mode === 'encode' ? enc : dec;
+    try {
+      out.value = perline.checked ? inp.value.split('\n').map((l) => (l ? fn(l) : '')).join('\n') : inp.value ? fn(inp.value) : '';
+    } catch {
+      out.value = '';
+      err.textContent = 'The input is not valid Base64. Check for missing characters or switch to Encode.';
+    }
+  }
+  document.querySelectorAll('input').forEach((el) => el.addEventListener('change', run));
+  inp.addEventListener('input', run);
+  document.getElementById('b64-copy')!.addEventListener('click', () => navigator.clipboard.writeText(out.value).catch(() => {}));
+</script>
+
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+</style>

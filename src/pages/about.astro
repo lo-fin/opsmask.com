@@ -1,0 +1,20 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../config';
+---
+<Base title="About and privacy" description={`How ${SITE.name} works, how it protects what you paste and how it is funded.`}>
+  <div class="prose">
+    <h1>About {SITE.name}</h1>
+    <p>{SITE.name} is a set of tools, cheatsheets and AI prompts for people who run infrastructure. It is a static site with no backend, no accounts and no uploads.</p>
+
+    <h2>What happens to what you paste</h2>
+    <p>Tools run as JavaScript in your browser tab. The site sends a Content Security Policy with <code>connect-src 'self'</code>, which tells your browser to block the page from sending data to any other server. You can check it in your browser’s developer tools under Network, or read the policy in <a href={`${SITE.repo}/blob/${SITE.branch}/public/_headers`}>public/_headers</a>.</p>
+    <p>Prompt pages mask passwords, tokens, keys, connection strings, IP addresses, emails and GUIDs before copying. Masking catches common patterns, not everything, so read the prompt before you send it to an AI service.</p>
+
+    <h2>Open source</h2>
+    <p>All code is on <a href={SITE.repo}>GitHub</a> under the MIT License. Tool requests, new prompts and fixes are welcome as issues or pull requests.</p>
+
+    <h2>Funding</h2>
+    <p>The site is paid for by one small developer-focused ad per page and by donations{SITE.support.kofi && <> on <a href={SITE.support.kofi}>Ko-fi</a></>}. Ads never appear between a tool’s input and output, never pop up and never play sound. No analytics or tracking scripts are loaded.</p>
+  </div>
+</Base>

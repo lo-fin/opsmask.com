@@ -1,0 +1,137 @@
+---
+import Base from '../../layouts/Base.astro';
+import AdSlot from '../../components/AdSlot.astro';
+import { getCollection } from 'astro:content';
+import { toolBySlug } from '../../data/tools';
+import { SITE, repoEditUrl } from '../../config';
+
+export async function getStaticPaths() {
+  const items = await getCollection('prompts');
+  return items.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+const { entry } = Astro.props;
+const { variables, relatedTools } = entry.data;
+const template = (entry.body ?? '').trim();
+const payload = JSON.stringify({ template, variables }).replace(/</g, '\\u003c');
+const tools = relatedTools.map(toolBySlug).filter(Boolean);
+---
+<Base title={entry.data.title} description={entry.data.description}>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/prompts/">Prompts</a> / {entry.data.category}</nav>
+  <h1>{entry.data.title}</h1>
+  <p class="lede">{entry.data.description}</p>
+
+  <div class="grid">
+    <form class="fields" id="prompt-form" onsubmit="return false">
+      {variables.map((v) => (
+        <div class="field">
+          <label for={`v-${v.name}`}>{v.label}{v.optional && <span class="opt"> (optional)</span>}</label>
+          {v.multiline
+            ? <textarea id={`v-${v.name}`} name={v.name} class="code" placeholder={v.placeholder} spellcheck="false"></textarea>
+            : <input id={`v-${v.name}`} name={v.name} type="text" placeholder={v.placeholder} />}
+        </div>
+      ))}
+      <fieldset class="masking">
+        <legend>Mask before copying</legend>
+        <label class="check"><input type="checkbox" name="m-secrets" checked /> Passwords, tokens, keys</label>
+        <label class="check"><input type="checkbox" name="m-ips" checked /> IP addresses</label>
+        <label class="check"><input type="checkbox" name="m-ids" /> Emails and GUIDs</label>
+      </fieldset>
+    </form>
+
+    <section class="preview" aria-labelledby="preview-title">
+      <div class="preview-head">
+        <h2 id="preview-title">Prompt preview</h2>
+        <span id="mask-count" class="muted" aria-live="polite"></span>
+      </div>
+      <pre class="out" id="preview"></pre>
+      <div class="actions">
+        <button class="btn" type="button" id="copy">Copy prompt</button>
+        <span id="copy-status" class="muted" aria-live="polite"></span>
+      </div>
+      <p class="muted small">Masking catches common patterns, not everything. Read the preview before you send it.</p>
+    </section>
+  </div>
+
+  {tools.length > 0 && (
+    <section class="related">
+      <h2>Check it locally first</h2>
+      <ul>{tools.map((t) => <li><a href={`/tools/${t!.slug}/`}>{t!.title}</a></li>)}</ul>
+    </section>
+  )}
+
+  <p class="edit"><a href={repoEditUrl(entry.filePath)} rel="noopener">Improve this prompt on GitHub</a></p>
+  <AdSlot />
+  <script type="application/json" id="prompt-data" set:html={payload}></script>
+  <div id="support-cfg" data-kofi={SITE.support.kofi} hidden></div>
+</Base>
+
+<script>
+  import { redact, MASK_PATTERN } from '../../lib/redact';
+  import { supportNudge } from '../../scripts/support';
+
+  type Var = { name: string; label: string; optional: boolean };
+  const data = JSON.parse(document.getElementById('prompt-data')!.textContent!) as { template: string; variables: Var[] };
+  const form = document.getElementById('prompt-form') as HTMLFormElement;
+  const preview = document.getElementById('preview')!;
+  const countEl = document.getElementById('mask-count')!;
+  let finalText = '';
+
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+  function fill(values: Record<string, string>) {
+    // {{#name}} ... {{/name}} blocks are dropped when the value is empty
+    let out = data.template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}\n?/g, (_m, name, inner) => (values[name]?.trim() ? inner : ''));
+    out = out.replace(/\{\{(\w+)\}\}/g, (_m, name) => values[name]?.trim() || `<${name}>`);
+    return out.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function update() {
+    const fd = new FormData(form);
+    const values: Record<string, string> = {};
+    for (const v of data.variables) values[v.name] = String(fd.get(v.name) ?? '');
+    const filled = fill(values);
+    const { text, count } = redact(filled, {
+      secrets: fd.has('m-secrets'),
+      ips: fd.has('m-ips'),
+      identifiers: fd.has('m-ids'),
+    });
+    finalText = text;
+    preview.innerHTML = esc(text).replace(MASK_PATTERN, (m) => `<mark class="mask">${m}</mark>`);
+    countEl.textContent = count ? `${count} value${count > 1 ? 's' : ''} masked` : '';
+  }
+
+  form.addEventListener('input', update);
+  update();
+
+  document.getElementById('copy')!.addEventListener('click', async () => {
+    const status = document.getElementById('copy-status')!;
+    try {
+      await navigator.clipboard.writeText(finalText);
+      status.textContent = 'Copied. Paste it into your AI chat.';
+      supportNudge(document.querySelector('.preview')!, document.getElementById('support-cfg')!.dataset.kofi ?? '');
+    } catch {
+      status.textContent = 'Copy failed. Select the preview and press Ctrl+C.';
+    }
+  });
+</script>
+
+<style>
+  .crumbs { color: var(--ink-soft); font-size: 0.95rem; margin-bottom: 0.75rem; }
+  .crumbs a { color: var(--ink-soft); }
+  .lede { font-size: 1.15rem; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: start; margin-top: 1.5rem; }
+  .fields { display: grid; gap: 1.1rem; }
+  .opt { font-weight: 400; color: var(--ink-soft); }
+  .masking { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.75rem 1rem; }
+  .masking legend { font-weight: 700; padding-inline: 0.3rem; }
+  .preview { position: sticky; top: 5rem; }
+  .preview-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .preview-head h2 { font-size: 1.1rem; }
+  .preview .out { max-height: 60vh; overflow-y: auto; }
+  .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.8rem; }
+  .small { font-size: 0.88rem; margin-top: 0.6rem; }
+  .related { margin-top: 2.5rem; }
+  .edit { margin-top: 2rem; font-size: 0.9rem; }
+  .edit a { color: var(--ink-soft); }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .preview { position: static; } }
+</style>

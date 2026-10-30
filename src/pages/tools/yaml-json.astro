@@ -1,0 +1,71 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="yaml-json">
+  <div class="controls">
+    <label class="check"><input type="radio" name="dir" value="y2j" checked /> YAML → JSON</label>
+    <label class="check"><input type="radio" name="dir" value="j2y" /> JSON → YAML</label>
+    <label class="check">Indent
+      <select id="indent"><option>2</option><option>4</option></select>
+    </label>
+  </div>
+  <div class="panes">
+    <div>
+      <label for="src">Input</label>
+      <textarea id="src" class="code tall" spellcheck="false"></textarea>
+    </div>
+    <div>
+      <div class="row"><label for="dst">Output</label><button class="btn ghost" type="button" id="copy">Copy output</button></div>
+      <textarea id="dst" class="code tall" readonly></textarea>
+    </div>
+  </div>
+  <p id="err" class="status-err" aria-live="polite"></p>
+
+  <div slot="notes" class="prose">
+    <h2>Notes</h2>
+    <p>Multiple YAML documents separated by <code>---</code> become a JSON array. Comments and anchors are not kept, because JSON has no place for them. Watch for values YAML reads as non-strings, such as <code>on</code>, <code>yes</code> or <code>0123</code>: quote them in Helm values.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  const src = document.getElementById('src') as HTMLTextAreaElement;
+  const dst = document.getElementById('dst') as HTMLTextAreaElement;
+  const err = document.getElementById('err')!;
+  const indent = document.getElementById('indent') as HTMLSelectElement;
+
+  function run() {
+    err.textContent = '';
+    const dir = (document.querySelector('input[name="dir"]:checked') as HTMLInputElement).value;
+    const n = Number(indent.value);
+    if (!src.value.trim()) { dst.value = ''; return; }
+    try {
+      if (dir === 'y2j') {
+        const docs = yaml.loadAll(src.value).filter((d) => d !== undefined);
+        dst.value = JSON.stringify(docs.length === 1 ? docs[0] : docs, null, n);
+      } else {
+        dst.value = yaml.dump(JSON.parse(src.value), { indent: n, lineWidth: -1, noRefs: true });
+      }
+    } catch (e) {
+      dst.value = '';
+      err.textContent = (e as Error).message.split('\n')[0];
+    }
+  }
+  src.addEventListener('input', run);
+  document.querySelectorAll('input[name="dir"], #indent').forEach((el) => el.addEventListener('change', () => {
+    if (dst.value && !err.textContent) { src.value = dst.value; }
+    run();
+  }));
+  document.getElementById('copy')!.addEventListener('click', () => navigator.clipboard.writeText(dst.value).catch(() => {}));
+</script>
+
+<style>
+  .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .controls select { width: auto; margin-left: 0.4rem; padding: 0.25rem 0.5rem; }
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; }
+  .tall { min-height: 22rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  @media (max-width: 760px) { .panes { grid-template-columns: 1fr; } }
+</style>

@@ -1,0 +1,131 @@
+---
+import Base from '../layouts/Base.astro';
+import SearchBox from '../components/SearchBox.astro';
+import { TOOLS } from '../data/tools';
+import { SITE } from '../config';
+import { getCollection } from 'astro:content';
+
+const cheatsheets = (await getCollection('cheatsheets')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+const prompts = (await getCollection('prompts')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+const quick = [
+  { label: 'Decode a JWT', href: '/tools/jwt-decoder/' },
+  { label: 'Check a manifest', href: '/tools/k8s-manifest-checker/' },
+  { label: 'Split a subnet', href: '/tools/cidr-calculator/' },
+  { label: 'Read a cron', href: '/tools/cron-explainer/' },
+];
+const demo = `2026-10-30T02:14:07Z ERROR db connect failed
+  Server=tcp:10.20.4.17,1433;User ID=app_rw;Password=Sup3r-S3cret!;
+  Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhcGktc3ZjIn0.k3y
+  retry 3/5 from 10.20.4.9 owner=oncall@example.com`;
+---
+<Base hideHeaderSearch>
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Paste logs into AI without leaking secrets.</h1>
+      <p class="sub">Tools, cheatsheets and prompts for Kubernetes, cloud and CI/CD. Everything runs in your browser and the code is open source.</p>
+      <SearchBox id="hero-search" size="hero" placeholder="jwt, cron, cidr, crashloop…" />
+      <p class="quick">{quick.map((q) => <a href={q.href}>{q.label}</a>)}</p>
+    </div>
+
+    <div class="demo" aria-labelledby="demo-title">
+      <div class="demo-head">
+        <h2 id="demo-title">Try it: edit the log</h2>
+        <span id="demo-count" class="muted" aria-live="polite"></span>
+      </div>
+      <label for="demo-in" class="sr-only">Log text</label>
+      <textarea id="demo-in" class="code" spellcheck="false">{demo}</textarea>
+      <p class="demo-label">What the AI sees</p>
+      <pre class="out" id="demo-out" aria-live="polite"></pre>
+      <a class="demo-cta" href="/prompts/debug-crashloopbackoff/">Use it with a debugging prompt</a>
+    </div>
+  </section>
+
+  <div class="columns">
+    <section>
+      <h2><a href="/tools/">Tools</a></h2>
+      <ul class="list">
+        {TOOLS.map((t) => <li><a href={`/tools/${t.slug}/`}>{t.title}</a><span>{t.description}</span></li>)}
+      </ul>
+    </section>
+    <section>
+      <h2><a href="/prompts/">AI prompts</a></h2>
+      <ul class="list">
+        {prompts.map((p) => <li><a href={`/prompts/${p.id}/`}>{p.data.title}</a><span>{p.data.description}</span></li>)}
+      </ul>
+    </section>
+    <section>
+      <h2><a href="/cheatsheets/">Cheatsheets</a></h2>
+      <ul class="list">
+        {cheatsheets.map((c) => <li><a href={`/cheatsheets/${c.id}/`}>{c.data.title}</a><span>{c.data.description}</span></li>)}
+      </ul>
+    </section>
+  </div>
+
+  <section class="open">
+    <div>
+      <h2>Open source, no backend</h2>
+      <p>Read every line on GitHub. Missing a tool or a prompt you use every week? Open an issue or send a pull request.</p>
+    </div>
+    <p class="open-links">
+      <a class="btn" href={SITE.repo} rel="noopener">View on GitHub</a>
+      {SITE.support.kofi && <a class="btn ghost" href={SITE.support.kofi} rel="noopener">Support on Ko-fi</a>}
+    </p>
+  </section>
+</Base>
+
+<script>
+  import { redact, MASK_PATTERN } from '../lib/redact';
+  const input = document.getElementById('demo-in') as HTMLTextAreaElement;
+  const out = document.getElementById('demo-out')!;
+  const count = document.getElementById('demo-count')!;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+  function render(animate = false) {
+    const r = redact(input.value, { secrets: true, ips: true, identifiers: true });
+    let i = 0;
+    out.innerHTML = esc(r.text).replace(MASK_PATTERN, (m) => `<mark class="mask${animate ? ' reveal' : ''}" style="--i:${i++}">${m}</mark>`);
+    count.textContent = r.count ? `${r.count} values masked` : 'Nothing to mask';
+  }
+  input.addEventListener('input', () => render());
+  render(true);
+</script>
+
+<style>
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 3.5rem; align-items: center; padding-block: 2rem 3.5rem; }
+  .hero h1 { font-size: clamp(2.1rem, 1.3rem + 3vw, 3.4rem); letter-spacing: -0.025em; line-height: 1.08; margin-bottom: 1rem; }
+  .sub { font-size: 1.2rem; color: var(--ink-soft); margin-bottom: 1.6rem; }
+  .quick { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-top: 0.9rem; font-size: 0.95rem; }
+
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.2rem 1.25rem; box-shadow: 0 1px 0 var(--line), 0 18px 40px -24px rgb(16 32 60 / 0.35); }
+  .demo-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .demo-head h2 { font-size: 1rem; margin: 0 0 0.6rem; }
+  .demo textarea { min-height: 8.75rem; font-size: 0.8rem; background: var(--bg); }
+  .demo-label { margin: 0.9rem 0 0.35rem; font-weight: 700; font-size: 0.95rem; }
+  .demo .out { font-size: 0.8rem; background: var(--bg); line-height: 1.7; }
+  .demo-cta { display: inline-block; margin-top: 0.8rem; font-size: 0.95rem; font-weight: 700; }
+
+  /* The one orchestrated motion on the site: masks slide over the secrets on load */
+  .demo :global(mark.reveal) { animation: cover 380ms cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(500ms + var(--i) * 160ms); transform-origin: left center; }
+  @keyframes cover { from { transform: scaleX(0); opacity: 0.3; } to { transform: scaleX(1); opacity: 1; } }
+  .demo :global(mark) { display: inline-block; }
+
+  .columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2.5rem; border-top: 1px solid var(--line); padding-top: 2.5rem; }
+  .columns h2 a { color: var(--ink); text-decoration: none; }
+  .columns h2 a:hover { text-decoration: underline; }
+  .list { list-style: none; padding: 0; margin: 0; }
+  .list li { padding-block: 0.6rem; border-bottom: 1px solid var(--line); }
+  .list a { font-weight: 700; display: block; }
+  .list span { color: var(--ink-soft); font-size: 0.93rem; }
+
+  .open { margin-top: 3.5rem; padding: 1.5rem 1.75rem; border-radius: 12px; background: var(--ink); color: var(--bg); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem 2rem; }
+  .open h2 { font-size: 1.3rem; }
+  .open p { margin: 0; color: color-mix(in srgb, var(--bg) 80%, var(--ink)); }
+  .open-links { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .open .btn { background: var(--mask); color: var(--mask-ink); }
+  .open .btn.ghost { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: 1fr; gap: 2rem; }
+    .columns { grid-template-columns: 1fr; gap: 2rem; }
+  }
+</style>

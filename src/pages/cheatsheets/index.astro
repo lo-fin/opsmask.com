@@ -1,0 +1,23 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+const items = (await getCollection('cheatsheets')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+---
+<Base title="Cheatsheets" description="Copy-ready command cheatsheets for kubectl, PromQL, openssl and more.">
+  <h1>Cheatsheets</h1>
+  <p class="muted">Commands you can copy and run. Every code block has a copy button.</p>
+  <ul class="cs">
+    {items.map((c) => (
+      <li>
+        <a href={`/cheatsheets/${c.id}/`}>{c.data.title}</a>
+        <span>{c.data.description}</span>
+      </li>
+    ))}
+  </ul>
+</Base>
+<style>
+  .cs { list-style: none; padding: 0; margin: 1.5rem 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0 2rem; }
+  .cs li { padding-block: 0.7rem; border-bottom: 1px solid var(--line); }
+  .cs a { font-weight: 700; display: block; }
+  .cs span { color: var(--ink-soft); font-size: 0.93rem; }
+</style>
