@@ -122,6 +122,13 @@ export const TOOLS: Tool[] = [
     keywords: ['cidr', 'subnet', 'ip', 'vnet', 'azure', 'network', 'netmask'],
   },
   {
+    slug: 'network-commands',
+    title: 'Network troubleshooting commands',
+    description: 'Get the ping, port, traceroute, DNS, curl, TLS, routing, MTU and packet capture commands for Linux, macOS or Windows, with each flag explained.',
+    group: 'Network',
+    keywords: ['network', 'troubleshoot', 'ping', 'port', 'nc', 'telnet', 'test-netconnection', 'traceroute', 'mtr', 'tracert', 'dig', 'nslookup', 'dns', 'curl', 'tls', 'openssl', 'ss', 'netstat', 'lsof', 'route', 'mtu', 'tcpdump', 'pktmon', 'firewall', 'connection refused', 'timeout'],
+  },
+  {
     slug: 'cron-explainer',
     title: 'Cron expression explainer',
     description: 'Read a cron schedule in plain words and see the next run times in UTC or local time.',

@@ -1,0 +1,104 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="network-commands">
+  <div class="top">
+    <div>
+      <label for="check">I want to check</label>
+      <select id="check"></select>
+    </div>
+    <div><label for="os">On</label><select id="os"></select></div>
+  </div>
+  <div id="fields" class="fields"></div>
+  <div>
+    <div class="row"><label for="cmd">Command</label><button class="btn ghost" type="button" id="copy">Copy</button></div>
+    <pre id="cmd" class="out cmd"></pre>
+    <p id="warn" class="status-warn" aria-live="polite"></p>
+    <ul id="explain" class="explain"></ul>
+    <div id="alt-wrap" hidden>
+      <h2 class="alt-title">Also useful</h2>
+      <ul id="alt" class="explain"></ul>
+    </div>
+    <div id="install-wrap" hidden>
+      <h2 class="alt-title">Command not found?</h2>
+      <ul id="install" class="explain"></ul>
+      <p class="muted hint">Inside a container running as root, drop <code>sudo</code>.</p>
+    </div>
+  </div>
+
+  <div slot="notes" class="prose">
+    <h2>Work up the layers</h2>
+    <p>Most “the network is down” problems are one of these. Check them in order and stop at the first one that fails.</p>
+    <ol>
+      <li><strong>DNS:</strong> does the name resolve, and to the address you expect? Compare the system resolver with a public one.</li>
+      <li><strong>Route:</strong> does traffic for that address leave through the interface you expect (VPN, not Wi-Fi)?</li>
+      <li><strong>TCP:</strong> is the port open? <em>Refused</em> means nothing listens there; <em>timed out</em> means a firewall drops it.</li>
+      <li><strong>TLS:</strong> is the certificate valid for the name, not expired, and sent with its intermediate?</li>
+      <li><strong>HTTP:</strong> what status and headers come back, and which step is slow?</li>
+    </ol>
+    <p>A failed ping proves little: many networks block ICMP. Test the port the application uses instead.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { build, CHECKS, OS_LABELS, type OS, type Values } from '../../lib/net-commands';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const check = $<HTMLSelectElement>('check');
+  const os = $<HTMLSelectElement>('os');
+  check.innerHTML = Object.entries(CHECKS).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join('');
+  os.innerHTML = Object.entries(OS_LABELS).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
+  const ua = navigator.userAgent;
+  os.value = /Windows/.test(ua) ? 'windows' : /Mac OS X/.test(ua) && !/iPhone|iPad/.test(ua) ? 'macos' : 'linux';
+
+  function renderFields() {
+    $('fields').innerHTML = CHECKS[check.value].fields.map((f) => {
+      const id = `f-${f.id}`;
+      if (f.type === 'check') return `<label class="check"><input type="checkbox" id="${id}" ${f.value ? 'checked' : ''} /> ${esc(f.label)}</label>`;
+      if (f.type === 'select') return `<div><label for="${id}">${esc(f.label)}</label><select id="${id}">${f.options!.map((o) => `<option>${esc(o)}</option>`).join('')}</select></div>`;
+      return `<div><label for="${id}">${esc(f.label)}</label><input id="${id}" type="text" class="code" value="${esc(String(f.value ?? ''))}" placeholder="${esc(f.placeholder ?? '')}" /></div>`;
+    }).join('');
+    run();
+  }
+
+  function run() {
+    const v: Values = {};
+    $('fields').querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach((el) => {
+      v[el.id.slice(2)] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value;
+    });
+    const out = build(check.value, os.value as OS, v);
+    $('cmd').textContent = out.lines.join('\n');
+    $('warn').textContent = out.warn ?? '';
+    $('explain').innerHTML = out.explain.map(([k, d]) => `<li><code>${esc(k)}</code> ${esc(d)}</li>`).join('');
+    $('alt-wrap').hidden = !out.alt?.length;
+    $('alt').innerHTML = (out.alt ?? []).map(([k, d]) => `<li><code>${esc(k)}</code> ${esc(d)}</li>`).join('');
+    $('install-wrap').hidden = !out.install?.length;
+    $('install').innerHTML = (out.install ?? []).map(([k, d]) => `<li>${esc(d)}: <code>${esc(k)}</code></li>`).join('');
+  }
+
+  check.addEventListener('change', renderFields);
+  os.addEventListener('change', run);
+  $('fields').addEventListener('input', run);
+  $('fields').addEventListener('change', run);
+  $('copy').addEventListener('click', () => copyText($('copy'), $('cmd').textContent ?? '', $('cmd')));
+  renderFields();
+</script>
+
+<style>
+  .top { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+  .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem 1rem; align-items: end; }
+  .fields :global(label) { font-size: 0.9rem; }
+  .fields :global(.check) { padding-bottom: 0.6rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .cmd { font-size: 0.95rem; white-space: pre-wrap; word-break: break-word; }
+  #warn { margin: 0.5rem 0 0; }
+  #warn:empty { display: none; }
+  .explain { margin: 0.5rem 0 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: 0.95rem; }
+  .alt-title { font-size: 1rem; margin: 1.25rem 0 0; }
+  .hint { margin: 0.4rem 0 0; font-size: 0.9rem; }
+  @media (max-width: 760px) { .top, .fields { grid-template-columns: 1fr; } }
+</style>
