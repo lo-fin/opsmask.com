@@ -12,8 +12,7 @@ export type Finding = {
 export type PssLevel = 'privileged' | 'baseline' | 'restricted';
 export type PssResult = { doc: string; docIndex: number; level: PssLevel; reasons: string[] };
 export type Report = { findings: Finding[]; podSecurity: PssResult[] };
-/** targetMinor: the Kubernetes 1.x minor version you deploy to, for deprecated API checks. */
-export type Options = { targetMinor?: number; ignore?: Iterable<string> };
+export type Options = { ignore?: Iterable<string> };
 
 /** Annotation listing rule IDs to skip for one object, e.g. "image-tag, no-liveness". */
 export const IGNORE_ANNOTATION = 'opsmask.com/ignore';
@@ -35,7 +34,6 @@ const RESOURCES = `resources:
 
 export const RULES: Rule[] = [
   { id: 'missing-field', severity: 'error', title: 'Required field missing', why: 'apiVersion, kind, metadata.name, a selector and a container image are required. The API server rejects the object without them.' },
-  { id: 'deprecated-api', severity: 'error', title: 'Removed or deprecated apiVersion', why: 'Beta API versions are removed in later Kubernetes releases. Applying them to an upgraded cluster fails with “no matches for kind”. Run kubectl convert or edit apiVersion, then check for renamed fields.' },
   { id: 'selector-mismatch', severity: 'error', title: 'Selector does not match pod labels', why: 'spec.selector must match spec.template.metadata.labels, otherwise the API server rejects the workload.' },
   { id: 'no-namespace', severity: 'info', title: 'No namespace', why: 'The object lands in whatever namespace kubectl, Helm or Argo CD targets, which can differ between people and pipelines.' },
   { id: 'secret-in-git', severity: 'warn', title: 'Secret values in the manifest', why: 'Base64 is encoding, not encryption. Anyone with access to the repo can read the value. Use External Secrets Operator, Sealed Secrets or the Secrets Store CSI driver.' },
@@ -110,35 +108,6 @@ spec:
 ];
 const RULE_BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
 
-// [apiVersion, kinds ('*' = any), removed in 1.x, replacement]
-const REMOVED: [string, string[] | '*', number, string][] = [
-  ['extensions/v1beta1', ['Ingress'], 22, 'networking.k8s.io/v1'],
-  ['extensions/v1beta1', ['NetworkPolicy'], 16, 'networking.k8s.io/v1'],
-  ['extensions/v1beta1', ['PodSecurityPolicy'], 16, 'Pod Security Admission'],
-  ['extensions/v1beta1', '*', 16, 'apps/v1'],
-  ['apps/v1beta1', '*', 16, 'apps/v1'],
-  ['apps/v1beta2', '*', 16, 'apps/v1'],
-  ['networking.k8s.io/v1beta1', '*', 22, 'networking.k8s.io/v1'],
-  ['rbac.authorization.k8s.io/v1beta1', '*', 22, 'rbac.authorization.k8s.io/v1'],
-  ['apiextensions.k8s.io/v1beta1', '*', 22, 'apiextensions.k8s.io/v1'],
-  ['admissionregistration.k8s.io/v1beta1', '*', 22, 'admissionregistration.k8s.io/v1'],
-  ['scheduling.k8s.io/v1beta1', '*', 22, 'scheduling.k8s.io/v1'],
-  ['certificates.k8s.io/v1beta1', '*', 22, 'certificates.k8s.io/v1'],
-  ['coordination.k8s.io/v1beta1', '*', 22, 'coordination.k8s.io/v1'],
-  ['storage.k8s.io/v1beta1', ['CSIStorageCapacity'], 27, 'storage.k8s.io/v1'],
-  ['storage.k8s.io/v1beta1', '*', 22, 'storage.k8s.io/v1'],
-  ['policy/v1beta1', ['PodSecurityPolicy'], 25, 'Pod Security Admission'],
-  ['policy/v1beta1', '*', 25, 'policy/v1'],
-  ['batch/v1beta1', '*', 25, 'batch/v1'],
-  ['discovery.k8s.io/v1beta1', '*', 25, 'discovery.k8s.io/v1'],
-  ['events.k8s.io/v1beta1', '*', 25, 'events.k8s.io/v1'],
-  ['autoscaling/v2beta1', '*', 25, 'autoscaling/v2'],
-  ['autoscaling/v2beta2', '*', 26, 'autoscaling/v2'],
-  ['flowcontrol.apiserver.k8s.io/v1beta1', '*', 26, 'flowcontrol.apiserver.k8s.io/v1'],
-  ['flowcontrol.apiserver.k8s.io/v1beta2', '*', 29, 'flowcontrol.apiserver.k8s.io/v1'],
-  ['flowcontrol.apiserver.k8s.io/v1beta3', '*', 32, 'flowcontrol.apiserver.k8s.io/v1'],
-];
-
 const CLUSTER_SCOPED = new Set([
   'Namespace', 'Node', 'PersistentVolume', 'StorageClass', 'CSIDriver', 'CSINode', 'VolumeAttachment',
   'CustomResourceDefinition', 'APIService', 'IngressClass', 'PriorityClass', 'RuntimeClass',
@@ -210,7 +179,6 @@ type Add = (rule: string, where: string, message: string, extra?: { severity?: S
 type Workload = { add: Add; kind: string; name?: string; ns?: string; labels: Record<string, unknown>; pod: any; replicas: number };
 
 export function checkManifests(docs: any[], opts: Options = {}): Report {
-  const target = opts.targetMinor ?? Infinity;
   const ignored = new Set(opts.ignore ?? []);
   const findings: Finding[] = [];
   const podSecurity: PssResult[] = [];
@@ -235,13 +203,6 @@ export function checkManifests(docs: any[], opts: Options = {}): Report {
     if (!doc.metadata?.name && !doc.metadata?.generateName) add('missing-field', 'metadata.name', 'Missing metadata.name.');
     if (doc.metadata && !ns && doc.kind && !CLUSTER_SCOPED.has(doc.kind) && !String(doc.kind).startsWith('Cluster'))
       add('no-namespace', 'metadata.namespace', 'No namespace set. It will go to whatever namespace kubectl or Argo CD targets.');
-
-    const removed = REMOVED.find(([api, kinds]) => api === doc.apiVersion && (kinds === '*' || kinds.includes(doc.kind)));
-    if (removed) {
-      const [api, , minor, replacement] = removed;
-      const gone = minor <= target;
-      add('deprecated-api', 'apiVersion', `${api} ${doc.kind} ${gone ? 'was removed' : 'is deprecated and will be removed'} in Kubernetes 1.${minor}. Use ${replacement}.`, { severity: gone ? 'error' : 'warn' });
-    }
 
     switch (doc.kind) {
       case 'Secret':

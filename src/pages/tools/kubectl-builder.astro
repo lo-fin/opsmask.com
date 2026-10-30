@@ -166,7 +166,7 @@ import ToolShell from '../../components/ToolShell.astro';
       label: 'Debug a pod or node with a tools container',
       fields: [
         { id: 'target', label: 'Pod or node/name', placeholder: 'api-7d9c8b6f5-2kq9x' },
-        { id: 'image', label: 'Image', type: 'select', options: ['nicolaka/netshoot', 'busybox:1.36', 'ubuntu'] },
+        { id: 'image', label: 'Image', type: 'select', options: ['nicolaka/netshoot', 'busybox', 'ubuntu'] },
         { id: 'tc', label: 'Share process namespace with container', placeholder: 'api' },
       ],
       build: (v) => {
