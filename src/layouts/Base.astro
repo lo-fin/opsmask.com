@@ -40,6 +40,16 @@ const year = new Date().getFullYear();
     <script is:inline>
       try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
     </script>
+    {SITE.ads.provider === 'adsense' && SITE.ads.adsense.clientId && (
+      <>
+        <meta name="google-adsense-account" content={SITE.ads.adsense.clientId} />
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${SITE.ads.adsense.clientId}`}
+          crossorigin="anonymous"
+        ></script>
+      </>
+    )}
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -57,7 +67,7 @@ const year = new Date().getFullYear();
             <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
           </a>
           {kofi && (
-            <a class="support" href={kofi} rel="noopener">
+            <a class="support" href={kofi} target="_blank" rel="noopener">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 5h13a3 3 0 0 1 0 6h-.3A6 6 0 0 1 11 16H9a6 6 0 0 1-6-6V6a1 1 0 0 1 1-1Zm13 4a1 1 0 0 0 0-2v2ZM3 19h15v2H3z"/></svg>
               <span>Support</span>
             </a>
@@ -91,7 +101,7 @@ const year = new Date().getFullYear();
         <div class="col">
           <h2>Support</h2>
           <ul>
-            {kofi && <li><a href={kofi} rel="noopener">Buy me a coffee on Ko-fi</a></li>}
+            {kofi && <li><a href={kofi} target="_blank" rel="noopener">Buy me a coffee on Ko-fi</a></li>}
             {githubSponsors && <li><a href={githubSponsors} rel="noopener">GitHub Sponsors</a></li>}
             <li><a href={SITE.repo} rel="noopener">Star the repo</a></li>
             <li><a href="/about/">About and privacy</a></li>
@@ -171,6 +181,39 @@ const year = new Date().getFullYear();
         .foot { grid-template-columns: 1fr 1fr; }
         .foot .about { grid-column: 1 / -1; }
       }
+      .kofi-float {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1.25rem;
+        z-index: 30;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: #72a4f2;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 0.85rem;
+        padding: 0.55rem 0.95rem;
+        border-radius: 9999px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+        text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .kofi-float:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        color: #ffffff;
+      }
+      @media (max-width: 640px) {
+        .kofi-float span { display: none; }
+        .kofi-float { padding: 0.65rem; bottom: 1rem; right: 1rem; }
+      }
     </style>
+    {kofi && (
+      <a class="kofi-float" href={kofi} target="_blank" rel="noopener" aria-label="Support on Ko-fi" title="Support on Ko-fi">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 5h13a3 3 0 0 1 0 6h-.3A6 6 0 0 1 11 16H9a6 6 0 0 1-6-6V6a1 1 0 0 1 1-1Zm13 4a1 1 0 0 0 0-2v2ZM3 19h15v2H3z"/></svg>
+        <span>Support on Ko-fi</span>
+      </a>
+    )}
   </body>
 </html>
