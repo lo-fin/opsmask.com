@@ -25,18 +25,82 @@ const year = new Date().getFullYear();
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Primary Meta Tags -->
     <title>{fullTitle}</title>
+    <meta name="title" content={fullTitle} />
     <meta name="description" content={description} />
+    <meta name="robots" content={path.startsWith('/404') ? 'noindex, nofollow' : 'index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1'} />
+    <meta name="keywords" content="devops tools, kubernetes validator, jwt decoder, cidr calculator, cron explainer, base64 encoder decoder, redact secrets, promql cheatsheet, kubectl cheatsheet, client side tools, offline developer utilities" />
+    <meta name="author" content={SITE.name} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#111a27" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content={path.startsWith('/cheatsheets/') || path.startsWith('/prompts/') ? 'article' : 'website'} />
     <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:url" content={canonical} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL('/og-image.svg', SITE.url).href} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${SITE.name} - DevOps Tools & AI Prompts`} />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content={canonical} />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={new URL('/og-image.svg', SITE.url).href} />
+    <meta name="twitter:image:alt" content={`${SITE.name} - DevOps Tools & AI Prompts`} />
+
+    <!-- Schema.org Structured Data (JSON-LD) -->
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${SITE.url}/#website`,
+          "url": SITE.url,
+          "name": SITE.name,
+          "description": SITE.tagline,
+          "inLanguage": "en-US",
+          "publisher": {
+            "@type": "Organization",
+            "name": SITE.name,
+            "url": SITE.url,
+            "logo": {
+              "@type": "ImageObject",
+              "url": `${SITE.url}/favicon.svg`
+            }
+          }
+        },
+        {
+          "@type": path.startsWith('/tools/') && path !== '/tools/' ? "WebApplication" : "WebPage",
+          "@id": `${canonical}#webpage`,
+          "url": canonical,
+          "name": fullTitle,
+          "description": description,
+          "isPartOf": {
+            "@id": `${SITE.url}/#website`
+          },
+          ...(path.startsWith('/tools/') && path !== '/tools/' ? {
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "All",
+            "browserRequirements": "Requires JavaScript. Requires HTML5.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          } : {})
+        }
+      ]
+    })} />
     <script is:inline>
       try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
     </script>
