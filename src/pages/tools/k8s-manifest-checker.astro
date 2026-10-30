@@ -184,6 +184,10 @@ spec:
   }
 
   ta.addEventListener('input', run);
+  // Other tools link here with the YAML in the hash, which never leaves the browser.
+  if (location.hash.startsWith('#yaml=')) {
+    try { ta.value = decodeURIComponent(location.hash.slice(6)); run(); } catch {}
+  }
   document.getElementById('load-sample')!.addEventListener('click', () => {
     ta.value = JSON.parse(document.getElementById('sample')!.textContent!);
     run();

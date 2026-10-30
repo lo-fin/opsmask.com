@@ -28,6 +28,14 @@ export const TOOLS: Tool[] = [
     relatedPrompts: ['debug-crashloopbackoff'],
   },
   {
+    slug: 'k8s-neat',
+    title: 'kubectl neat: clean exported YAML',
+    description: 'Strip status, managedFields, cluster-assigned IPs and default values from kubectl get -o yaml, and get a manifest you can commit.',
+    group: 'Kubernetes',
+    keywords: ['kubernetes', 'k8s', 'kubectl neat', 'export', 'managedfields', 'clean yaml', 'get -o yaml', 'gitops', 'manifest'],
+    relatedPrompts: ['review-k8s-manifest'],
+  },
+  {
     slug: 'k8s-resource-calculator',
     title: 'Kubernetes resource calculator',
     description: 'Convert CPU and memory quantities, see how many pods fit on a node, and total the requests in your manifests.',
