@@ -83,6 +83,7 @@ kbd {
 
 .wrap { width: min(1200px, 100% - 2.5rem); margin-inline: auto; }
 .muted { color: var(--ink-soft); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* Masked value: the site's signature mark */
 mark.mask, .mask {
@@ -134,6 +135,14 @@ th { color: var(--ink-soft); font-weight: 700; }
   border-radius: var(--radius-s); padding: 0.2rem 0.5rem; cursor: pointer; opacity: 0.85;
 }
 .copy-btn:hover { opacity: 1; }
+
+/* Copy feedback, set by scripts/copy.ts */
+.btn.is-copied, .copy-btn.is-copied { color: var(--ok); border-color: var(--ok); opacity: 1; }
+.btn.is-copy-failed, .copy-btn.is-copy-failed { color: var(--warn); border-color: var(--warn); opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .btn.is-copied, .copy-btn.is-copied { animation: copied 0.25s ease-out; }
+}
+@keyframes copied { from { transform: scale(0.94); } to { transform: scale(1); } }
 
 /* Shiki dual theme */
 html[data-theme='dark'] .astro-code, html[data-theme='dark'] .astro-code span {

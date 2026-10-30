@@ -28,7 +28,7 @@ export function redact(input: string, opts: RedactOptions): RedactResult {
     sub(/([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+@/gi, (_m, p) => `${p}[REDACTED_SECRET]@`);
     // key=value / key: value / "key": "value"
     sub(
-      new RegExp(`(["']?(?:${SECRET_KEYS})["']?\\s*[:=]\\s*["']?)([^"'\\s;,}]{3,})`, 'gi'),
+      new RegExp(`(["']?(?:${SECRET_KEYS})["']?\\s*[:=]\\s*["']?)(?!\\[REDACTED)([^"'\\s;,}]{3,})`, 'gi'),
       (_m, p) => `${p}[REDACTED_SECRET]`,
     );
   }

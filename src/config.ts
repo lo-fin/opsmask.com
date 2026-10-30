@@ -5,7 +5,7 @@ export const SITE = {
   url: 'https://opsmask.com',
 
   // Public repo. Used for the GitHub link, "Edit this page" and issue templates.
-  repo: 'https://github.com/lo-finom',
+  repo: 'https://github.com/lo-fin/opsmask.com',
   branch: 'main',
 
   support: {

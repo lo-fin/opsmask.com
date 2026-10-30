@@ -1,5 +1,6 @@
 ---
 import ToolShell from '../../components/ToolShell.astro';
+import { RULES, IGNORE_ANNOTATION } from '../../lib/k8s-check';
 const sample = `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,81 +16,230 @@ spec:
       containers:
         - name: api
           image: myregistry.azurecr.io/api:latest
-          ports: [{ containerPort: 8080 }]
+          ports: [{ name: http, containerPort: 8080 }]
           env:
             - name: DB_PASSWORD
               value: "changeme"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector: { app: api }
+  ports: [{ port: 80, targetPort: web }]
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: api
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            backend: { serviceName: api, servicePort: 80 }
 `;
+const versions = Array.from({ length: 18 }, (_, i) => 16 + i);
 ---
 <ToolShell slug="k8s-manifest-checker">
   <div>
     <div class="row">
       <label for="manifest">Manifest (YAML, multiple documents allowed)</label>
-      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+      <span class="row-actions">
+        <label class="inline" for="target">Target
+          <select id="target">
+            <option value="">latest</option>
+            {versions.reverse().map((v) => <option value={v}>1.{v}</option>)}
+          </select>
+        </label>
+        <button class="btn ghost" type="button" id="load-sample">Load example</button>
+      </span>
     </div>
     <textarea id="manifest" class="code tall" spellcheck="false" placeholder="apiVersion: apps/v1&#10;kind: Deployment&#10;..."></textarea>
   </div>
   <p id="summary" class="summary" aria-live="polite"></p>
+  <p id="ignored" class="ignored" hidden></p>
+  <div id="pss" class="pss" hidden></div>
   <ul id="findings" class="findings"></ul>
   <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+  <script type="application/json" id="fixes" set:html={JSON.stringify(Object.fromEntries(RULES.filter((r) => r.fix).map((r) => [r.id, r.fix]))).replace(/</g, '\\u003c')}></script>
 
   <div slot="notes" class="prose">
     <h2>What this checks</h2>
-    <p>Required fields, image tags, resource requests and limits, security context, probes, host namespaces, plain-text secrets in env vars and Secret objects in Git. For CI, run kubeconform for schema validation and kube-linter or Polaris for policy.</p>
+    <p>Required fields, removed API versions, selectors, image tags, resources, security context, probes, host namespaces, plain-text secrets and RBAC wildcards. When you paste several documents it also checks that Services select pods, target ports exist, Ingress backends exist, HPAs have requests to scale on and replicated workloads have a PodDisruptionBudget. For CI, run kubeconform for schema validation and kube-linter or Polaris for policy.</p>
+    <p>The Pod Security Standards line shows the strictest <a href="https://kubernetes.io/docs/concepts/security/pod-security-standards/" rel="noopener">level</a> each workload would pass: Privileged, Baseline or Restricted.</p>
+    <h2 id="rules">Rules</h2>
+    <p>Ignore a rule for this browser with the <em>Ignore</em> button, or for one object with an annotation:</p>
+    <pre><code set:text={`metadata:\n  annotations:\n    ${IGNORE_ANNOTATION}: "image-tag, no-liveness"`} /></pre>
+    <dl class="rules">
+      {RULES.map((r) => (
+        <Fragment>
+          <dt id={`rule-${r.id}`}><code>{r.id}</code> {r.title}</dt>
+          <dd>{r.why}</dd>
+        </Fragment>
+      ))}
+    </dl>
   </div>
 </ToolShell>
 
 <script>
   import yaml from 'js-yaml';
-  import { checkManifests } from '../../lib/k8s-check';
+  import { checkManifests, type Finding } from '../../lib/k8s-check';
+  import { copyText } from '../../scripts/copy';
   const ta = document.getElementById('manifest') as HTMLTextAreaElement;
+  const target = document.getElementById('target') as HTMLSelectElement;
   const summary = document.getElementById('summary')!;
+  const ignoredBar = document.getElementById('ignored')!;
+  const pssBox = document.getElementById('pss')!;
   const list = document.getElementById('findings')!;
-  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  const fixes: Record<string, string> = JSON.parse(document.getElementById('fixes')!.textContent!);
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const LABEL = { error: 'Error', warn: 'Warning', info: 'Tip' } as const;
+  const PSS = { privileged: 'Privileged', baseline: 'Baseline', restricted: 'Restricted' } as const;
+
+  const KEY = 'opsmask:k8s-ignore';
+  let ignored = new Set<string>();
+  try { ignored = new Set(JSON.parse(localStorage.getItem(KEY) ?? '[]')); } catch {}
+  const saveIgnored = () => { try { localStorage.setItem(KEY, JSON.stringify([...ignored])); } catch {} };
+
+  // Split on document markers ourselves so every finding can point at a line.
+  type Doc = { start: number; lines: string[]; value: unknown };
+  function parse(text: string): Doc[] {
+    const chunks: { start: number; lines: string[] }[] = [{ start: 0, lines: [] }];
+    text.split('\n').forEach((l, n) => {
+      if (/^---(\s|$)/.test(l)) chunks.push({ start: n + 1, lines: [] });
+      else chunks[chunks.length - 1].lines.push(l);
+    });
+    const docs: Doc[] = [];
+    for (const c of chunks) {
+      try {
+        const value = yaml.load(c.lines.join('\n'));
+        if (value != null) docs.push({ ...c, value });
+      } catch (e) {
+        const line = (e as any).mark?.line;
+        throw new Error(`${line != null ? `line ${c.start + line + 1}: ` : ''}${(e as Error).message.split('\n')[0].replace(/ \(\d+:\d+\)$/, '')}`);
+      }
+    }
+    return docs;
+  }
+
+  const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function lineOf(d: Doc, f: Finding): number {
+    const find = (re: RegExp, from = 0) => { const i = d.lines.slice(from).findIndex((l) => re.test(l)); return i < 0 ? -1 : i + from; };
+    let idx = -1;
+    if (f.container) {
+      const from = Math.max(0, find(/^\s*(init)?[cC]ontainers:/));
+      idx = find(new RegExp(`^\\s*(-\\s+)?name:\\s*["']?${reEsc(f.container)}["']?\\s*(#.*)?$`), from);
+    } else if (/^[\w.]+$/.test(f.where)) {
+      idx = find(new RegExp(`^\\s*(-\\s+)?${reEsc(f.where.split('.').pop()!)}:`));
+    }
+    if (idx < 0) idx = Math.max(0, find(/^\s*[^\s#]/));
+    return d.start + idx + 1;
+  }
+
+  function goToLine(n: number) {
+    const lines = ta.value.split('\n');
+    const start = lines.slice(0, n - 1).reduce((s, l) => s + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(start, start + (lines[n - 1]?.length ?? 0));
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    ta.scrollTop = Math.max(0, (n - 4) * lh);
+  }
 
   function run() {
     list.innerHTML = '';
+    pssBox.hidden = true;
     summary.className = 'summary';
+    ignoredBar.hidden = !ignored.size;
+    ignoredBar.innerHTML = ignored.size
+      ? `Ignoring ${[...ignored].map((r) => `<code>${esc(r)}</code>`).join(', ')} · <button type="button" class="link" id="reset-ignore">Show all again</button>`
+      : '';
     if (!ta.value.trim()) { summary.textContent = ''; return; }
-    let docs: unknown[];
+    let docs: Doc[];
     try {
-      docs = yaml.loadAll(ta.value).filter((d) => d != null);
+      docs = parse(ta.value);
     } catch (e) {
       summary.className = 'summary status-err';
-      summary.textContent = `YAML error: ${(e as Error).message.split('\n')[0]}`;
+      summary.textContent = `YAML error, ${(e as Error).message}`;
       return;
     }
-    const f = checkManifests(docs);
+    const { findings: f, podSecurity } = checkManifests(docs.map((d) => d.value), {
+      targetMinor: target.value ? Number(target.value) : undefined,
+      ignore: ignored,
+    });
     const n = { error: 0, warn: 0, info: 0 };
     f.forEach((x) => n[x.severity]++);
     summary.className = `summary ${n.error ? 'status-err' : n.warn ? 'status-warn' : 'status-ok'}`;
     summary.textContent = f.length
       ? `${plural(docs.length, 'document')}: ${plural(n.error, 'error')}, ${plural(n.warn, 'warning')}, ${plural(n.info, 'tip')}.`
-      : `${docs.length} document${docs.length > 1 ? 's' : ''}, no issues found.`;
-    list.innerHTML = f
-      .map((x) => `<li class="sev-${x.severity}"><span class="sev">${LABEL[x.severity]}</span><span><strong>${esc(x.doc)}</strong> · ${esc(x.where)}<br>${esc(x.message)}</span></li>`)
-      .join('');
+      : `${plural(docs.length, 'document')}, no issues found.`;
+
+    if (podSecurity.length) {
+      pssBox.hidden = false;
+      pssBox.innerHTML = `<strong>Pod Security Standards</strong><ul>${podSecurity.map((p) =>
+        `<li><span class="lvl lvl-${p.level}">${PSS[p.level]}</span> <span>${esc(p.doc)}${p.reasons.length ? ` <span class="muted">· to reach ${p.level === 'privileged' ? 'Baseline' : 'Restricted'}: ${esc(p.reasons.join(', '))}</span>` : ''}</span></li>`,
+      ).join('')}</ul>`;
+    }
+
+    list.innerHTML = f.map((x) => {
+      const line = lineOf(docs[x.docIndex], x);
+      const fix = fixes[x.rule];
+      return `<li class="sev-${x.severity}"><span class="sev">${LABEL[x.severity]}</span><div>
+        <strong>${esc(x.doc)}</strong> · ${esc(x.where)} · <button type="button" class="link" data-line="${line}">line ${line}</button><br>${esc(x.message)}
+        <div class="meta"><a href="#rule-${x.rule}"><code>${x.rule}</code></a> · <button type="button" class="link" data-ignore="${x.rule}">Ignore rule</button></div>
+        ${fix ? `<details><summary>Example fix</summary><pre><code>${esc(fix)}</code></pre><button type="button" class="btn ghost small" data-copy>Copy</button></details>` : ''}
+      </div></li>`;
+    }).join('');
   }
+
   ta.addEventListener('input', run);
+  target.addEventListener('change', run);
   document.getElementById('load-sample')!.addEventListener('click', () => {
     ta.value = JSON.parse(document.getElementById('sample')!.textContent!);
     run();
+  });
+  document.querySelector('.tool')!.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest('button');
+    if (!el) return;
+    if (el.dataset.line) goToLine(Number(el.dataset.line));
+    else if (el.dataset.ignore) { ignored.add(el.dataset.ignore); saveIgnored(); run(); }
+    else if (el.id === 'reset-ignore') { ignored.clear(); saveIgnored(); run(); }
+    else if (el.hasAttribute('data-copy')) {
+      const code = el.parentElement!.querySelector('code')!;
+      copyText(el, code.textContent ?? '', code);
+    }
   });
 </script>
 
 <style is:global>
   .tall { min-height: 18rem; }
-  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; flex-wrap: wrap; }
   .row label { margin: 0; }
   .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .row-actions { display: inline-flex; gap: 0.75rem; align-items: center; }
+  .row-actions .inline { display: inline-flex; gap: 0.4rem; align-items: center; font-weight: 400; font-size: 0.9rem; }
   .summary { font-weight: 700; margin: 0; }
+  .ignored { margin: 0; font-size: 0.9rem; color: var(--ink-soft); }
+  button.link { background: none; border: 0; padding: 0; font: inherit; color: var(--ink-soft); text-decoration: underline; cursor: pointer; }
+  .pss { padding: 0.6rem 0.8rem; background: var(--surface); border-radius: var(--radius-s); font-size: 0.95rem; }
+  .pss ul { list-style: none; padding: 0; margin: 0.35rem 0 0; display: grid; gap: 0.3rem; }
+  .pss li { display: flex; gap: 0.6rem; align-items: baseline; }
+  .lvl { flex: none; font-size: 0.8rem; font-weight: 700; padding: 0.05rem 0.45rem; border-radius: var(--radius-s); border: 1px solid currentColor; }
+  .lvl-privileged { color: var(--err); } .lvl-baseline { color: var(--warn); } .lvl-restricted { color: var(--ok); }
   .findings { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
-  .findings li { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; padding: 0.6rem 0.8rem; background: var(--surface); border-left: 4px solid var(--line); border-radius: var(--radius-s); }
+  .findings li { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.75rem; padding: 0.6rem 0.8rem; background: var(--surface); border-left: 4px solid var(--line); border-radius: var(--radius-s); }
   .findings .sev { font-weight: 700; font-size: 0.9rem; }
+  .findings .meta { margin-top: 0.25rem; font-size: 0.85rem; color: var(--ink-soft); }
+  .findings .meta a { color: var(--ink-soft); }
+  .findings details { margin-top: 0.35rem; font-size: 0.9rem; }
+  .findings details pre { margin: 0.35rem 0; padding: 0.6rem 0.8rem; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
   .sev-error { border-left-color: var(--err) !important; } .sev-error .sev { color: var(--err); }
   .sev-warn { border-left-color: var(--mask) !important; } .sev-warn .sev { color: var(--warn); }
   .sev-info .sev { color: var(--ink-soft); }
+  .rules dt { margin-top: 0.75rem; font-weight: 700; scroll-margin-top: 5rem; }
+  .rules dt:target { color: var(--warn); }
+  .rules dd { margin: 0.15rem 0 0; }
   @media (max-width: 520px) { .findings li { grid-template-columns: 1fr; gap: 0.2rem; } }
 </style>

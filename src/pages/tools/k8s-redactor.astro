@@ -1,0 +1,116 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const sample = `apiVersion: v1
+kind: Config
+clusters:
+  - name: aks-prod
+    cluster:
+      certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t
+      server: https://aks-prod-dns-1a2b3c4d.hcp.westeurope.azmk8s.io:443
+users:
+  - name: clusterUser_rg-prod_aks-prod
+    user:
+      token: 8f1d2c3b4a5e6f7081928374655647382910abcdef
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  annotations:
+    owner: platform-team@example.com
+data:
+  DB_PASSWORD: czNjcjN0LXBhc3N3b3Jk
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          image: myregistry.azurecr.io/api:1.4.2
+          env:
+            - name: STORAGE_CONNECTION_STRING
+              value: DefaultEndpointsProtocol=https;AccountName=prodstore;AccountKey=abc123==
+            - name: REDIS_HOST
+              value: 10.20.4.17
+            - name: AZURE_CLIENT_ID
+              value: 3f2a9c1e-7b4d-4e8f-9a6b-1c2d3e4f5a6b
+`;
+---
+<ToolShell slug="k8s-redactor">
+  <div>
+    <div class="row">
+      <label for="src">Manifest, kubeconfig or kubectl output</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea id="src" class="code tall" spellcheck="false"></textarea>
+  </div>
+  <fieldset class="masking">
+    <legend>Mask</legend>
+    <label class="check"><input type="checkbox" id="o-secrets" checked /> Secrets, tokens and keys</label>
+    <label class="check"><input type="checkbox" id="o-endpoints" checked /> Cluster API endpoints</label>
+    <label class="check"><input type="checkbox" id="o-ips" checked /> IP addresses</label>
+    <label class="check"><input type="checkbox" id="o-ids" checked /> Emails and GUIDs</label>
+  </fieldset>
+  <div>
+    <div class="row">
+      <span><strong>Masked output</strong> <span id="count" class="muted" aria-live="polite"></span></span>
+      <button class="btn ghost" type="button" id="copy">Copy</button>
+    </div>
+    <pre id="preview" class="out"></pre>
+  </div>
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>What gets masked</h2>
+    <ul>
+      <li>Every value under <code>data:</code> and <code>stringData:</code> in a Secret, including multi-line values.</li>
+      <li>kubeconfig credentials: <code>certificate-authority-data</code>, <code>client-certificate-data</code>, <code>client-key-data</code>, <code>token</code>, <code>password</code>, and the cluster’s <code>server</code> host.</li>
+      <li>Env var values whose name looks like a secret (<code>*PASSWORD*</code>, <code>*TOKEN*</code>, <code>*CONNECTION_STRING*</code>…).</li>
+      <li>The <code>last-applied-configuration</code> annotation, which often contains a copy of the Secret.</li>
+      <li>JWTs, bearer tokens, GitHub and AWS keys, private keys and credentials in URLs.</li>
+    </ul>
+    <p>The same value always gets the same placeholder (<code>[IP_1]</code>, <code>[CLUSTER_HOST_1]</code>), so an AI can still tell which pods talk to which address. Always read the output before you paste it: this catches common patterns, not every secret.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { redactK8s, K8S_MASK_PATTERN } from '../../lib/k8s-redact';
+  import { copyText } from '../../scripts/copy';
+  const src = document.getElementById('src') as HTMLTextAreaElement;
+  const preview = document.getElementById('preview')!;
+  const countEl = document.getElementById('count')!;
+  const opt = (id: string) => (document.getElementById(id) as HTMLInputElement).checked;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  let output = '';
+
+  function run() {
+    const { text, count } = redactK8s(src.value, {
+      secrets: opt('o-secrets'), endpoints: opt('o-endpoints'), ips: opt('o-ips'), identifiers: opt('o-ids'),
+    });
+    output = text;
+    preview.innerHTML = esc(text).replace(K8S_MASK_PATTERN, (m) => `<mark class="mask">${m}</mark>`);
+    countEl.textContent = count ? `· ${count} value${count > 1 ? 's' : ''} masked` : '';
+  }
+  src.addEventListener('input', run);
+  document.querySelectorAll('.masking input').forEach((el) => el.addEventListener('change', run));
+  const copyBtn = document.getElementById('copy')!;
+  copyBtn.addEventListener('click', () => copyText(copyBtn, output, preview));
+  document.getElementById('load-sample')!.addEventListener('click', () => {
+    src.value = JSON.parse(document.getElementById('sample')!.textContent!);
+    run();
+  });
+</script>
+
+<style>
+  .tall { min-height: 16rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .masking { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.75rem 1rem; }
+  .masking legend { font-weight: 700; padding-inline: 0.3rem; }
+  #preview { min-height: 6rem; }
+</style>
