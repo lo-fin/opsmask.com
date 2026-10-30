@@ -20,6 +20,14 @@ export const TOOLS: Tool[] = [
     relatedPrompts: ['review-k8s-manifest'],
   },
   {
+    slug: 'k8s-pod-status',
+    title: 'Pod status explainer',
+    description: 'Paste kubectl describe pod and find out why it is in CrashLoopBackOff, ImagePullBackOff, Pending or OOMKilled, and what to run next.',
+    group: 'Kubernetes',
+    keywords: ['kubernetes', 'k8s', 'pod', 'crashloopbackoff', 'imagepullbackoff', 'oomkilled', 'pending', 'evicted', 'exit code 137', 'troubleshoot', 'describe'],
+    relatedPrompts: ['debug-crashloopbackoff'],
+  },
+  {
     slug: 'k8s-resource-calculator',
     title: 'Kubernetes resource calculator',
     description: 'Convert CPU and memory quantities, see how many pods fit on a node, and total the requests in your manifests.',
