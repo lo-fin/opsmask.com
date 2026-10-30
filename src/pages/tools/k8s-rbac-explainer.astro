@@ -100,6 +100,10 @@ kubectl auth can-i get secrets --as=jane@example.com -n prod`} /></pre>
     out.innerHTML = sections.join('');
   }
   src.addEventListener('input', run);
+  // Other tools link here with the YAML in the hash, which never leaves the browser.
+  if (location.hash.startsWith('#yaml=')) {
+    try { src.value = decodeURIComponent(location.hash.slice(6)); run(); } catch {}
+  }
   document.getElementById('load-sample')!.addEventListener('click', () => {
     src.value = JSON.parse(document.getElementById('sample')!.textContent!);
     run();

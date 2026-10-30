@@ -56,6 +56,13 @@ export const TOOLS: Tool[] = [
     keywords: ['kubernetes', 'k8s', 'rbac', 'role', 'clusterrole', 'rolebinding', 'permissions', 'security', 'serviceaccount'],
   },
   {
+    slug: 'k8s-kubeconfig',
+    title: 'Service account kubeconfig generator',
+    description: 'Get a script that creates a service account with the right RBAC and writes a kubeconfig for it. The token never touches this page.',
+    group: 'Kubernetes',
+    keywords: ['kubernetes', 'k8s', 'kubeconfig', 'service account', 'serviceaccount', 'token', 'rbac', 'ci', 'cd', 'github actions', 'create token'],
+  },
+  {
     slug: 'k8s-networkpolicy',
     title: 'NetworkPolicy explainer',
     description: 'See what a NetworkPolicy allows in plain words, and test whether one pod can reach another.',
