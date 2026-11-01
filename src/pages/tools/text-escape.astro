@@ -1,0 +1,138 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sample = `{"host": "db.internal", "query": "SELECT * FROM users WHERE name = 'Alice & Bob'"}\nsecond line`;
+---
+<ToolShell slug="text-escape">
+  <div class="block">
+    <div class="row">
+      <label for="esc-in">Input string</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea
+      id="esc-in"
+      class="code short-ta"
+      spellcheck="false"
+      placeholder='Paste a string to escape or unescape (JSON, shell, URL, HTML)…'
+    ></textarea>
+
+    <div id="results-wrap" class="results" hidden>
+      <table class="fixed-table">
+        <thead>
+          <tr>
+            <th class="key-col">Conversion</th>
+            <th class="val-col">Result</th>
+            <th class="act-col"><span class="sr-only">Copy</span></th>
+          </tr>
+        </thead>
+        <tbody id="esc-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>When to use which format</h2>
+    <p>Use <strong>JSON escaped</strong> when embedding a multi-line secret, certificate or JSON payload inside another JSON field (such as <code>SecretString</code>). Use <strong>Shell single-quoted</strong> when passing arbitrary passwords or tokens safely to <code>kubectl</code> or <code>curl</code> on the command line.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { convertEscapes, type EscapeItem } from '../../lib/text-tools';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const inputEl = $<HTMLTextAreaElement>('esc-in');
+  const wrapEl = $('results-wrap');
+  const tbodyEl = $('esc-body');
+
+  let items: EscapeItem[] = [];
+
+  function run() {
+    items = convertEscapes(inputEl.value);
+    wrapEl.hidden = items.length === 0;
+    if (!items.length) return;
+
+    tbodyEl.innerHTML = items
+      .map((item, idx) => {
+        const singleLine = item.value.replace(/\r?\n/g, ' ↵ ');
+        return `<tr>
+          <td class="key-cell" title="${esc(item.label)}"><code>${esc(item.label)}</code></td>
+          <td class="val-cell"><span class="val" id="val-${idx}" title="${esc(item.value)}">${esc(singleLine)}</span></td>
+          <td class="act-col">
+            <button class="btn ghost copy-val-btn" type="button" data-copy-val="${idx}">Copy</button>
+          </td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  tbodyEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-copy-val]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.copyVal);
+    const item = items[idx];
+    if (item) copyText(btn, item.value, document.getElementById(`val-${idx}`));
+  });
+
+  inputEl.addEventListener('input', run);
+  $('load-sample').addEventListener('click', () => {
+    inputEl.value = JSON.parse($('sample').textContent!);
+    run();
+  });
+</script>
+
+<style>
+  .block { display: grid; gap: 0.75rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.25rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .short-ta { min-height: 6.5rem; }
+  .results[hidden] { display: none; }
+  .fixed-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .fixed-table th,
+  .fixed-table td {
+    vertical-align: middle;
+  }
+  .key-col,
+  .key-cell {
+    width: 34%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val-col,
+  .val-cell {
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+  }
+  .act-col {
+    width: 6.25rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .copy-val-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.9rem;
+  }
+  @media (max-width: 640px) {
+    .key-col, .key-cell { width: 38%; }
+  }
+</style>

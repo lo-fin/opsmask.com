@@ -1,0 +1,149 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sample = `pod-billing-10
+pod-auth-2
+pod-billing-2
+  pod-auth-10  
+
+pod-billing-2
+pod-gateway-1`;
+---
+<ToolShell slug="text-lines">
+  <div class="block">
+    <div class="controls">
+      <label class="check"><input type="checkbox" id="opt-trim" checked /> Trim whitespace</label>
+      <label class="check"><input type="checkbox" id="opt-empty" checked /> Remove empty lines</label>
+      <label class="check"><input type="checkbox" id="opt-dedupe" checked /> Remove duplicates</label>
+      <label class="check"><input type="checkbox" id="opt-ci" /> Case-insensitive dedupe</label>
+      <label class="inline-sel">
+        Sort
+        <select id="opt-sort">
+          <option value="none">Keep order</option>
+          <option value="natural" selected>Natural (1, 2, 10)</option>
+          <option value="asc">A → Z</option>
+          <option value="desc">Z → A</option>
+          <option value="length">By length</option>
+        </select>
+      </label>
+      <label class="inline-sel">
+        Join output
+        <select id="opt-join">
+          <option value="newline">Newline</option>
+          <option value="comma">Comma (a, b, c)</option>
+          <option value="comma-quote">SQL quoted ('a', 'b')</option>
+          <option value="space">Space</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid-4">
+      <div>
+        <label for="opt-include">Keep lines containing</label>
+        <input id="opt-include" type="text" class="code" placeholder="optional" />
+      </div>
+      <div>
+        <label for="opt-exclude">Exclude lines containing</label>
+        <input id="opt-exclude" type="text" class="code" placeholder="optional" />
+      </div>
+      <div>
+        <label for="opt-prefix">Prefix each line</label>
+        <input id="opt-prefix" type="text" class="code" placeholder="e.g. - " />
+      </div>
+      <div>
+        <label for="opt-suffix">Suffix each line</label>
+        <input id="opt-suffix" type="text" class="code" placeholder="e.g. ," />
+      </div>
+    </div>
+
+    <div class="panes">
+      <div>
+        <div class="row">
+          <label for="src">Input</label>
+          <button class="btn ghost" type="button" id="load-sample">Load example</button>
+        </div>
+        <textarea id="src" class="code tall" spellcheck="false" placeholder="Paste lines of text, pod names, IPs or IDs…"></textarea>
+        <p id="src-stats" class="muted small stats-line" aria-live="polite"></p>
+      </div>
+      <div>
+        <div class="row">
+          <label for="dst">Output</label>
+          <button class="btn ghost" type="button" id="copy">Copy</button>
+        </div>
+        <textarea id="dst" class="code tall" readonly></textarea>
+        <p id="dst-stats" class="muted small stats-line" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Handy for DevOps &amp; SQL lists</h2>
+    <p>Paste a list of pod names, IPs, hostnames or IDs to strip duplicates and sort them naturally (so <code>pod-2</code> comes before <code>pod-10</code>). Switch <strong>Join output</strong> to <code>SQL quoted ('a', 'b')</code> to turn a column of IDs into an <code>IN (...)</code> clause in one click.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { getTextStats, transformLines, type LineTransformOptions } from '../../lib/text-tools';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const src = $<HTMLTextAreaElement>('src');
+  const dst = $<HTMLTextAreaElement>('dst');
+
+  function fmtStats(s: ReturnType<typeof getTextStats>) {
+    return `${s.lines} lines (${s.uniqueLines} unique) · ${s.words} words · ${s.chars} chars`;
+  }
+
+  function run() {
+    const opts: LineTransformOptions = {
+      trimLines: $('opt-trim').checked,
+      removeEmpty: $('opt-empty').checked,
+      dedupe: $('opt-dedupe').checked,
+      caseInsensitiveDedupe: $('opt-ci').checked,
+      sort: $<HTMLSelectElement>('opt-sort').value as LineTransformOptions['sort'],
+      joinWith: $<HTMLSelectElement>('opt-join').value as LineTransformOptions['joinWith'],
+      filterContains: $('opt-include').value,
+      filterExclude: $('opt-exclude').value,
+      prefix: $('opt-prefix').value,
+      suffix: $('opt-suffix').value,
+    };
+    dst.value = transformLines(src.value, opts);
+    $('src-stats').textContent = fmtStats(getTextStats(src.value));
+    $('dst-stats').textContent = fmtStats(getTextStats(dst.value));
+  }
+
+  document.querySelectorAll('input, select, textarea').forEach((el) => {
+    el.addEventListener('input', run);
+    el.addEventListener('change', run);
+  });
+  $('load-sample').addEventListener('click', () => {
+    src.value = JSON.parse($('sample').textContent!);
+    run();
+  });
+  $('copy').addEventListener('click', () => copyText($('copy'), dst.value, dst));
+  run();
+</script>
+
+<style>
+  .block { display: grid; gap: 1rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1.1rem; align-items: center; }
+  .inline-sel { display: inline-flex; align-items: center; gap: 0.45rem; margin: 0; font-weight: 400; }
+  .inline-sel select { width: auto; padding: 0.3rem 0.6rem; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; }
+  .tall { min-height: 18rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .small { font-size: 0.85rem; }
+  .stats-line { margin: 0.35rem 0 0; }
+  @media (max-width: 860px) {
+    .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .panes { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .grid-4 { grid-template-columns: 1fr; }
+  }
+</style>

@@ -3,14 +3,77 @@ export type Tool = {
   slug: string;
   title: string;
   description: string;
-  group: 'Kubernetes' | 'Network' | 'Encoding & crypto' | 'Scheduling' | 'Data formats';
+  group: 'Text' | 'Data formats' | 'Kubernetes' | 'Network' | 'Encoding & crypto' | 'Scheduling';
   keywords: string[];
   relatedPrompts?: string[];
 };
 
-export const TOOL_GROUPS: Tool['group'][] = ['Kubernetes', 'Network', 'Encoding & crypto', 'Scheduling', 'Data formats'];
+export const TOOL_GROUPS: Tool['group'][] = ['Text', 'Data formats', 'Kubernetes', 'Network', 'Encoding & crypto', 'Scheduling'];
 
 export const TOOLS: Tool[] = [
+  {
+    slug: 'text-lines',
+    title: 'Text line sorter, deduplicator & cleaner',
+    description: 'Remove duplicate lines, sort, trim, filter, add prefixes/suffixes or join lines with commas and quotes.',
+    group: 'Text',
+    keywords: ['text', 'lines', 'sort', 'dedupe', 'duplicate', 'unique', 'trim', 'join', 'split', 'count', 'words', 'sql in'],
+  },
+  {
+    slug: 'text-diff',
+    title: 'Text diff & compare',
+    description: 'Compare two blocks of text, configs or logs line by line and spot additions and removals instantly.',
+    group: 'Text',
+    keywords: ['text', 'diff', 'compare', 'difference', 'config', 'yaml', 'json', 'patch'],
+  },
+  {
+    slug: 'text-case',
+    title: 'Case & naming converter',
+    description: 'Convert text or identifiers between camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case and dot.case.',
+    group: 'Text',
+    keywords: ['text', 'case', 'camelcase', 'pascalcase', 'snake_case', 'kebab-case', 'uppercase', 'lowercase', 'convert'],
+  },
+  {
+    slug: 'text-escape',
+    title: 'String escape / unescape & URL encode',
+    description: 'Escape or unescape JSON strings, shell quotes, URL components and HTML entities with one-click copy.',
+    group: 'Text',
+    keywords: ['text', 'escape', 'unescape', 'json string', 'url encode', 'urlencode', 'urldecode', 'html entities', 'quotes', 'newline'],
+  },
+  {
+    slug: 'password-generator',
+    title: 'Password, secret & API key generator',
+    description: 'Generate random passwords, 256-bit Hex / Base64 keys, prefixed API tokens (sk_, whsec_) and memorable passphrases.',
+    group: 'Text',
+    keywords: ['password', 'secret', 'generate', 'random', 'token', 'key', 'hex', 'base64', 'api key', 'passphrase', 'openssl rand', 'entropy'],
+  },
+  {
+    slug: 'uuid-generator',
+    title: 'UUID, ULID & NanoID generator',
+    description: 'Generate UUID v4, time-ordered UUID v7, 26-char ULIDs, URL-safe NanoIDs and Kubernetes-style resource slugs in bulk.',
+    group: 'Text',
+    keywords: ['uuid', 'guid', 'ulid', 'nanoid', 'v4', 'v7', 'generate', 'random', 'id', 'identifier', 'slug'],
+  },
+  {
+    slug: 'json-values',
+    title: 'JSON value extractor',
+    description: 'Paste JSON to list every key and value with one-click copy buttons, nested path flattening and embedded JSON unwrapping.',
+    group: 'Data formats',
+    keywords: ['json', 'value', 'key', 'copy', 'extract', 'flatten', 'appsettings', 'secret', 'env', 'parse'],
+  },
+  {
+    slug: 'xml-values',
+    title: 'XML value extractor',
+    description: 'Paste XML (web.config, pom.xml, SOAP or custom configs) to list every element and attribute value with one-click copy buttons.',
+    group: 'Data formats',
+    keywords: ['xml', 'value', 'key', 'copy', 'extract', 'xpath', 'web.config', 'app.config', 'appsettings', 'connectionstrings', 'pom', 'soap', 'attribute'],
+  },
+  {
+    slug: 'yaml-json',
+    title: 'YAML ↔ JSON converter',
+    description: 'Convert YAML to JSON and back, including multi-document YAML.',
+    group: 'Data formats',
+    keywords: ['yaml', 'json', 'convert', 'helm', 'values'],
+  },
   {
     slug: 'k8s-manifest-checker',
     title: 'Kubernetes manifest checker',
@@ -92,13 +155,6 @@ export const TOOLS: Tool[] = [
     group: 'Kubernetes',
     keywords: ['kubectl', 'kubernetes', 'k8s', 'logs', 'exec', 'port-forward', 'rollout', 'debug', 'command'],
     relatedPrompts: ['debug-crashloopbackoff'],
-  },
-  {
-    slug: 'yaml-json',
-    title: 'YAML ↔ JSON converter',
-    description: 'Convert YAML to JSON and back, including multi-document YAML.',
-    group: 'Data formats',
-    keywords: ['yaml', 'json', 'convert', 'helm', 'values'],
   },
   {
     slug: 'jwt-decoder',

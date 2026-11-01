@@ -1,0 +1,202 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sampleLeft = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-api
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.internal/billing:1.4.2
+          env:
+            - name: LOG_LEVEL
+              value: info`;
+
+const sampleRight = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-api
+spec:
+  replicas: 4
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.internal/billing:1.5.0
+          env:
+            - name: LOG_LEVEL
+              value: warn
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4317`;
+---
+<ToolShell slug="text-diff">
+  <div class="block">
+    <div class="controls">
+      <label class="check"><input type="checkbox" id="opt-ws" /> Ignore whitespace</label>
+      <label class="check"><input type="checkbox" id="opt-case" /> Ignore case</label>
+      <label class="check"><input type="checkbox" id="opt-changes" /> Show changed lines only</label>
+      <button class="btn ghost small-btn" type="button" id="swap-btn">Swap left ↔ right</button>
+      <button class="btn ghost small-btn" type="button" id="load-sample">Load example</button>
+    </div>
+
+    <div class="panes">
+      <div>
+        <label for="left-in">Original (left)</label>
+        <textarea id="left-in" class="code" spellcheck="false" placeholder="Paste original text or config…"></textarea>
+      </div>
+      <div>
+        <label for="right-in">Modified (right)</label>
+        <textarea id="right-in" class="code" spellcheck="false" placeholder="Paste modified text or config…"></textarea>
+      </div>
+    </div>
+
+    <div id="diff-wrap" class="diff-wrap" hidden>
+      <div class="row">
+        <p id="diff-summary" class="summary" aria-live="polite"></p>
+        <button class="btn ghost small-btn" type="button" id="copy-diff">Copy unified diff</button>
+      </div>
+      <div id="diff-out" class="diff-box" role="region" aria-label="Diff result"></div>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample-l" set:html={JSON.stringify(sampleLeft).replace(/</g, '\\u003c')}></script>
+  <script type="application/json" id="sample-r" set:html={JSON.stringify(sampleRight).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Comparing configs and manifests</h2>
+    <p>Check <strong>Ignore whitespace</strong> when comparing YAML or JSON that was reformatted with different indentation, or check <strong>Show changed lines only</strong> to focus on additions and removals in long files.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { diffLines } from '../../lib/text-tools';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+  const leftEl = $<HTMLTextAreaElement>('left-in');
+  const rightEl = $<HTMLTextAreaElement>('right-in');
+  const wsEl = $<HTMLInputElement>('opt-ws');
+  const caseEl = $<HTMLInputElement>('opt-case');
+  const changesOnlyEl = $<HTMLInputElement>('opt-changes');
+  const wrapEl = $('diff-wrap');
+  const outEl = $('diff-out');
+  const summaryEl = $('diff-summary');
+
+  let unifiedText = '';
+
+  function run() {
+    if (!leftEl.value && !rightEl.value) {
+      wrapEl.hidden = true;
+      return;
+    }
+    wrapEl.hidden = false;
+    const res = diffLines(leftEl.value, rightEl.value, {
+      ignoreWhitespace: wsEl.checked,
+      ignoreCase: caseEl.checked,
+    });
+
+    if (res.added === 0 && res.removed === 0) {
+      summaryEl.innerHTML = `<span class="status-ok">Identical (${res.unchanged} lines)</span>`;
+    } else {
+      summaryEl.innerHTML = `<span class="status-ok">+${res.added} added</span> · <span class="status-err">−${res.removed} removed</span> · <span class="muted">${res.unchanged} unchanged</span>`;
+    }
+
+    const visibleOps = changesOnlyEl.checked ? res.ops.filter((o) => o.type !== 'equal') : res.ops;
+    unifiedText = visibleOps
+      .map((o) => `${o.type === 'add' ? '+' : o.type === 'del' ? '-' : ' '} ${o.text}`)
+      .join('\n');
+
+    if (visibleOps.length === 0) {
+      outEl.innerHTML = `<div class="diff-empty muted">No differences found.</div>`;
+      return;
+    }
+
+    outEl.innerHTML = visibleOps
+      .map((o) => {
+        const sign = o.type === 'add' ? '+' : o.type === 'del' ? '−' : ' ';
+        const numA = o.lineA ?? '';
+        const numB = o.lineB ?? '';
+        return `<div class="diff-line diff-${o.type}"><span class="ln">${numA}</span><span class="ln">${numB}</span><span class="sg">${sign}</span><span class="tx">${esc(o.text) || ' '}</span></div>`;
+      })
+      .join('');
+  }
+
+  [leftEl, rightEl, wsEl, caseEl, changesOnlyEl].forEach((el) => {
+    el.addEventListener('input', run);
+    el.addEventListener('change', run);
+  });
+
+  $('swap-btn').addEventListener('click', () => {
+    const tmp = leftEl.value;
+    leftEl.value = rightEl.value;
+    rightEl.value = tmp;
+    run();
+  });
+
+  $('load-sample').addEventListener('click', () => {
+    leftEl.value = JSON.parse($('sample-l').textContent!);
+    rightEl.value = JSON.parse($('sample-r').textContent!);
+    run();
+  });
+
+  $('copy-diff').addEventListener('click', (e) => {
+    copyText(e.currentTarget as HTMLButtonElement, unifiedText, outEl);
+  });
+</script>
+
+<style>
+  .block { display: grid; gap: 1rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; }
+  .small-btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; }
+  .panes textarea { min-height: 13rem; }
+  .diff-wrap { display: grid; gap: 0.5rem; }
+  .diff-wrap[hidden] { display: none; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .summary { margin: 0; font-weight: 700; font-size: 0.95rem; }
+  .diff-box {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    overflow-x: auto;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  .diff-empty { padding: 0.85rem 1rem; }
+  .diff-box :global(.diff-line) {
+    display: grid;
+    grid-template-columns: 2.6rem 2.6rem 1.4rem minmax(0, 1fr);
+    padding: 0.1rem 0.6rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .diff-box :global(.ln) {
+    color: var(--ink-soft);
+    text-align: right;
+    padding-right: 0.5rem;
+    user-select: none;
+    font-size: 0.78rem;
+  }
+  .diff-box :global(.sg) {
+    user-select: none;
+    font-weight: 700;
+  }
+  .diff-box :global(.diff-add) {
+    background: color-mix(in srgb, var(--ok) 14%, transparent);
+  }
+  .diff-box :global(.diff-add .sg) { color: var(--ok); }
+  .diff-box :global(.diff-del) {
+    background: color-mix(in srgb, var(--err) 14%, transparent);
+  }
+  .diff-box :global(.diff-del .sg) { color: var(--err); }
+  @media (max-width: 760px) {
+    .panes { grid-template-columns: 1fr; }
+  }
+</style>

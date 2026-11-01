@@ -1,0 +1,188 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="uuid-generator">
+  <div class="block">
+    <div class="controls">
+      <label class="inline-sel" for="uuid-ver">
+        Format
+        <select id="uuid-ver">
+          <option value="v4" selected>UUID v4 (random)</option>
+          <option value="v7">UUID v7 (time-ordered)</option>
+          <option value="ulid">ULID (26-char Crockford Base32, sortable)</option>
+          <option value="nanoid">NanoID (21-char URL-safe)</option>
+          <option value="k8s">K8s-style slug (word-word-x9k2m)</option>
+          <option value="nil">Nil UUID (all zeros)</option>
+        </select>
+      </label>
+
+      <label class="inline-sel" id="nanoid-len-wrap" for="nanoid-len" hidden>
+        Length
+        <input id="nanoid-len" type="number" min="4" max="64" value="21" class="code num-in" />
+      </label>
+
+      <label class="inline-sel" for="uuid-count">
+        Count
+        <select id="uuid-count">
+          <option value="1">1</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+        </select>
+      </label>
+
+      <span id="uuid-fmt-opts" class="fmt-opts">
+        <label class="check"><input type="checkbox" id="opt-hyphens" checked /> Hyphens (<code>-</code>)</label>
+        <label class="check"><input type="checkbox" id="opt-upper" /> Uppercase</label>
+        <label class="check"><input type="checkbox" id="opt-braces" /> Braces (<code>{`{…}`}</code>)</label>
+      </span>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn small-btn" type="button" id="regen-btn">Regenerate</button>
+      <button class="btn ghost small-btn" type="button" id="copy-all">Copy all</button>
+    </div>
+
+    <table id="uuid-table" class="fixed-table">
+      <thead>
+        <tr>
+          <th class="idx-col">#</th>
+          <th class="val-col">Generated ID</th>
+          <th class="act-col"><span class="sr-only">Copy</span></th>
+        </tr>
+      </thead>
+      <tbody id="uuid-body"></tbody>
+    </table>
+  </div>
+
+  <div slot="notes" class="prose">
+    <h2>UUID v4 vs UUID v7 vs ULID vs NanoID</h2>
+    <ul>
+      <li><strong>UUID v4:</strong> 122 bits of random data; standard 36-character format for correlation IDs and tokens.</li>
+      <li><strong>UUID v7 (RFC 9562):</strong> 48-bit Unix millisecond timestamp + random bits. Sorts in creation order and avoids B-tree index fragmentation in PostgreSQL, MySQL and SQL Server.</li>
+      <li><strong>ULID:</strong> 26-character Crockford Base32 string (48-bit timestamp + 80-bit random). Lexicographically sortable, compact, and double-click selectable without hyphens.</li>
+      <li><strong>NanoID:</strong> Compact URL-safe identifier (<code>A-Za-z0-9_-</code>), popular for short links and frontend state IDs.</li>
+    </ul>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { generateUuids, type UuidVersion } from '../../lib/generators';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const verEl = $<HTMLSelectElement>('uuid-ver');
+  const fmtOptsEl = $('uuid-fmt-opts');
+  const nanoidWrapEl = $('nanoid-len-wrap');
+  const tbodyEl = $('uuid-body');
+  let list: string[] = [];
+
+  function run() {
+    const version = verEl.value as UuidVersion;
+    const isUuid = version === 'v4' || version === 'v7' || version === 'nil';
+    fmtOptsEl.hidden = !isUuid;
+    nanoidWrapEl.hidden = version !== 'nanoid';
+
+    const count = Number($<HTMLSelectElement>('uuid-count').value) || 5;
+    list = generateUuids({
+      version,
+      count,
+      hyphens: $('opt-hyphens').checked,
+      uppercase: $('opt-upper').checked,
+      braces: $('opt-braces').checked,
+      nanoidLength: Number($('nanoid-len').value) || 21,
+    });
+
+    tbodyEl.innerHTML = list
+      .map(
+        (u, idx) => `<tr>
+          <td class="idx-cell muted">${idx + 1}</td>
+          <td class="val-cell"><span class="val" id="val-${idx}" title="${esc(u)}">${esc(u)}</span></td>
+          <td class="act-col">
+            <button class="btn ghost copy-val-btn" type="button" data-copy-val="${idx}">Copy</button>
+          </td>
+        </tr>`,
+      )
+      .join('');
+  }
+
+  tbodyEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-copy-val]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.copyVal);
+    if (list[idx]) copyText(btn, list[idx], document.getElementById(`val-${idx}`));
+  });
+
+  $('copy-all').addEventListener('click', (e) => {
+    copyText(e.currentTarget as HTMLButtonElement, list.join('\n'));
+  });
+
+  $('regen-btn').addEventListener('click', run);
+  document.querySelectorAll('input, select').forEach((el) => {
+    el.addEventListener('input', run);
+    el.addEventListener('change', run);
+  });
+
+  run();
+</script>
+
+<style>
+  .block { display: grid; gap: 0.85rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.65rem 1.15rem; align-items: center; }
+  .inline-sel { display: inline-flex; align-items: center; gap: 0.45rem; margin: 0; font-weight: 400; }
+  .inline-sel[hidden], .fmt-opts[hidden] { display: none; }
+  .inline-sel select { width: auto; padding: 0.3rem 0.6rem; }
+  .fmt-opts { display: inline-flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: center; }
+  .num-in {
+    width: 4.5rem;
+    padding: 0.3rem 0.5rem;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+  }
+  .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .small-btn { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+
+  .fixed-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .fixed-table th,
+  .fixed-table td {
+    vertical-align: middle;
+  }
+  .idx-col,
+  .idx-cell {
+    width: 2.5rem;
+    white-space: nowrap;
+  }
+  .val-col,
+  .val-cell {
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-code);
+    font-size: 0.9rem;
+  }
+  .act-col {
+    width: 6.25rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .copy-val-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.9rem;
+  }
+</style>
