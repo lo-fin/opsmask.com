@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b111c" />
+      <stop offset="50%" stop-color="#111a27" />
+      <stop offset="100%" stop-color="#182436" />
+    </linearGradient>
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f2b632" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#253549" stroke-width="0.8" opacity="0.4" />
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg-grad)" />
+  <rect width="1200" height="630" fill="url(#grid)" />
+
+  <!-- Subtle glow accents -->
+  <circle cx="200" cy="150" r="280" fill="#f2b632" opacity="0.08" filter="blur(60px)" />
+  <circle cx="1000" cy="480" r="320" fill="#3b82f6" opacity="0.06" filter="blur(80px)" />
+
+  <!-- Border Frame -->
+  <rect x="30" y="30" width="1140" height="570" rx="16" fill="none" stroke="#2a3d56" stroke-width="2" />
+
+  <!-- Logo Brand -->
+  <g transform="translate(100, 140)">
+    <text font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="64" fill="#ffffff" letter-spacing="-1.5">
+      ops<tspan fill="#111a27" dx="4"> </tspan>
+    </text>
+    <!-- Badge for 'mask' -->
+    <rect x="110" y="-50" width="168" height="64" rx="8" fill="url(#accent-grad)" />
+    <text x="122" y="-3" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="58" fill="#111a27" letter-spacing="-1">
+      mask
+    </text>
+  </g>
+
+  <!-- Badge: Privacy First -->
+  <g transform="translate(100, 210)">
+    <rect x="0" y="0" width="370" height="34" rx="17" fill="#1e2c3f" stroke="#334762" stroke-width="1.5" />
+    <circle cx="16" cy="17" r="5" fill="#10b981" />
+    <text x="32" y="22" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="14" fill="#93c5fd" letter-spacing="0.5">
+      100% CLIENT-SIDE • ZERO DATA UPLOAD
+    </text>
+  </g>
+
+  <!-- Main Headline -->
+  <text x="100" y="315" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="46" fill="#f8fafc" letter-spacing="-0.8">
+    DevOps Tools, Cheatsheets &amp; AI Prompts
+  </text>
+  <text x="100" y="365" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="500" font-size="28" fill="#94a3b8">
+    Mask secrets, debug manifests, decode tokens and explain crons safely in your browser.
+  </text>
+
+  <!-- Feature Tags Box -->
+  <g transform="translate(100, 435)">
+    <g transform="translate(0, 0)">
+      <rect width="210" height="48" rx="8" fill="#162334" stroke="#253952" stroke-width="1.5" />
+      <text x="18" y="30" font-family="'JetBrains Mono', monospace, monospace" font-size="16" font-weight="600" fill="#e2e8f0">⎈ K8s Validator</text>
+    </g>
+    <g transform="translate(225, 0)">
+      <rect width="180" height="48" rx="8" fill="#162334" stroke="#253952" stroke-width="1.5" />
+      <text x="18" y="30" font-family="'JetBrains Mono', monospace, monospace" font-size="16" font-weight="600" fill="#e2e8f0">🔑 JWT Decoder</text>
+    </g>
+    <g transform="translate(420, 0)">
+      <rect width="200" height="48" rx="8" fill="#162334" stroke="#253952" stroke-width="1.5" />
+      <text x="18" y="30" font-family="'JetBrains Mono', monospace, monospace" font-size="16" font-weight="600" fill="#e2e8f0">🌐 CIDR Calc</text>
+    </g>
+    <g transform="translate(635, 0)">
+      <rect width="190" height="48" rx="8" fill="#162334" stroke="#253952" stroke-width="1.5" />
+      <text x="18" y="30" font-family="'JetBrains Mono', monospace, monospace" font-size="16" font-weight="600" fill="#e2e8f0">⏱ Cron Explainer</text>
+    </g>
+    <g transform="translate(840, 0)">
+      <rect width="170" height="48" rx="8" fill="#162334" stroke="#253952" stroke-width="1.5" />
+      <text x="18" y="30" font-family="'JetBrains Mono', monospace, monospace" font-size="16" font-weight="600" fill="#e2e8f0">🛡 Secret Redact</text>
+    </g>
+  </g>
+
+  <!-- Footer link -->
+  <text x="100" y="540" font-family="'JetBrains Mono', monospace, monospace" font-size="18" font-weight="600" fill="#f2b632">
+    https://opsmask.com
+  </text>
+</svg>

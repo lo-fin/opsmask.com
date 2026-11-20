@@ -1,0 +1,61 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE, repoIssueUrl } from '../config';
+import { TOOLS } from '../data/tools';
+---
+<Base title="About OpsMask" description={`Learn how ${SITE.name} works, our local-first engineering architecture, editorial standards, and how the project is sustained.`}>
+  <article class="policy-card prose">
+    <span class="badge badge-accent">Local-First DevOps Workbench</span>
+    <h1>About {SITE.name}</h1>
+    <p class="lede">{SITE.name} is an open-source collection of {TOOLS.length} browser-based DevOps utilities, in-depth engineering guides, CLI cheatsheets, and secret-redacting AI prompts built for SREs, platform engineers, and backend developers.</p>
+
+    <h2>Why we built {SITE.name}</h2>
+    <p>Every day, infrastructure engineers decode Kubernetes Secrets, inspect JWT claims, troubleshoot <code>CrashLoopBackOff</code> logs, split cloud subnets, and ask AI assistants for help with production incidents. Many online developer utilities send pasted text to a remote backend, log request payloads, or clutter the screen with popups and dark patterns. Worse, engineers routinely copy raw logs containing bearer tokens, connection strings, or internal IP addresses directly into public AI chat windows.</p>
+    <p>{SITE.name} was created to solve both problems in one place: provide fast, reliable, offline-capable utilities that process every byte inside your browser tab, paired with structured troubleshooting guides and automated secret-masking prompt templates.</p>
+
+    <h2>How our local-first architecture works</h2>
+    <p>{SITE.name} is compiled as a static site with Astro and deployed globally on Cloudflare Pages. There is no application backend, no user database, and no server-side API receiving tool inputs. All parsing, YAML validation, CIDR math, JWT decoding, and regex-based secret redaction execute as pure client-side TypeScript in your browser.</p>
+    <ul>
+      <li><strong>No server uploads for tool inputs:</strong> ConfigMaps, Secrets, kubeconfigs, logs, and tokens you paste into any tool stay strictly in your browser memory.</li>
+      <li><strong>Auditable open-source logic:</strong> Every tool's core logic lives in pure TypeScript modules under <code>src/lib/</code> with automated Vitest unit tests, and the full source code is publicly auditable on <a href={SITE.repo} rel="noopener">GitHub</a> under the MIT License.</li>
+      <li><strong>Verifiable network behavior:</strong> You can open your browser's Developer Tools (Network tab) while using any utility and confirm that pasting or transforming data triggers zero outbound requests to {SITE.name} servers.</li>
+    </ul>
+
+    <h2>Editorial &amp; engineering standards</h2>
+    <p>Our guides, tool documentation, and CLI cheatsheets are written from real-world Kubernetes, cloud networking, and CI/CD operations experience. Every command snippet is checked for cross-platform compatibility across Linux, macOS, and Windows PowerShell, and every security note highlights practical failure modes—such as trailing newlines in Base64-encoded Secrets, unverified JWT signatures, or overly broad RBAC wildcards.</p>
+    <p>Pattern-based redaction catches common secret formats (passwords, API keys, bearer tokens, private keys, connection strings, IP addresses, and emails), but no automated regex can guarantee 100% coverage for proprietary formats. We always recommend reviewing the masked preview before sharing output with an external AI service or support ticket.</p>
+
+    <h2>How {SITE.name} is funded</h2>
+    <p>Maintaining {TOOLS.length}+ tested tools, documentation, and global edge hosting takes ongoing work. {SITE.name} remains free to use without accounts or paywalls through two transparent channels:</p>
+    <ul>
+      <li><strong>Non-intrusive advertising:</strong> We use Google AdSense to display limited advertisements outside tool input/output workflows. See our <a href="/privacy-policy/">Privacy Policy</a> for full details on how Google uses advertising cookies and how you can opt out of personalized ads.</li>
+      <li><strong>Community support:</strong> Engineers and teams who find {SITE.name} helpful can support ongoing development{SITE.support.kofi ? <> on <a href={SITE.support.kofi} target="_blank" rel="noopener">Ko-fi</a></> : ''}.</li>
+    </ul>
+
+    <h2>Contribute or get in touch</h2>
+    <p>Missing a Kubernetes validator, text utility, or troubleshooting guide you reach for every week? You can <a href={repoIssueUrl('tool_request.yml')} rel="noopener">request a tool</a>, <a href={repoIssueUrl('bug_report.yml')} rel="noopener">report a bug</a> on GitHub, or reach out directly via our <a href="/contact/">Contact page</a>.</p>
+  </article>
+</Base>
+
+<style>
+  .policy-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    padding: 2rem 2.25rem;
+    box-shadow: var(--shadow-md);
+    max-width: 54rem;
+  }
+  .policy-card h1 {
+    margin-top: 0.5rem;
+  }
+  .lede {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 640px) {
+    .policy-card {
+      padding: 1.35rem;
+    }
+  }
+</style>

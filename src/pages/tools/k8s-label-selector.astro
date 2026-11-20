@@ -1,0 +1,174 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const sampleSelector = 'app=api, env in (prod,staging), !canary';
+const sampleLabels = `NAME                   READY   STATUS    RESTARTS   AGE   LABELS
+api-7d9c8b6f5-2kq9x    1/1     Running   0          2d    app=api,env=prod,pod-template-hash=7d9c8b6f5
+api-7d9c8b6f5-x8m2p    1/1     Running   0          2d    app=api,env=prod,pod-template-hash=7d9c8b6f5
+api-canary-5f6b-qq1z   1/1     Running   0          3h    app=api,env=prod,canary=true
+worker-6c4d-9fj2k      1/1     Running   1          5d    app=worker,env=prod
+api-dev-55c8-p0o9i     1/1     Running   0          1h    app=api,env=dev`;
+---
+<ToolShell slug="k8s-label-selector">
+  <div>
+    <div class="row">
+      <label for="sel">Selector</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea id="sel" class="code short" spellcheck="false" placeholder="app=web, tier in (frontend,api), !legacy&#10;&#10;or YAML: matchLabels / matchExpressions"></textarea>
+    <p id="sel-err" class="status-err" aria-live="polite"></p>
+  </div>
+  <div class="forms" id="forms" hidden>
+    <div><span class="lbl">kubectl</span><pre class="out" id="as-string"></pre></div>
+    <div><span class="lbl">YAML</span><pre class="out" id="as-yaml"></pre></div>
+  </div>
+  <div>
+    <label for="labels">Objects and their labels</label>
+    <textarea id="labels" class="code" spellcheck="false" placeholder="Paste kubectl get pods --show-labels output, manifests, or one “name: k=v,k2=v2” per line"></textarea>
+    <p id="lab-err" class="status-err" aria-live="polite"></p>
+  </div>
+  <p id="summary" class="summary" aria-live="polite"></p>
+  <div class="table-wrap"><table id="out"></table></div>
+  <script type="application/json" id="sample" set:html={JSON.stringify([sampleSelector, sampleLabels]).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Selector syntax</h2>
+    <ul>
+      <li><code>app=web</code> or <code>app==web</code>: label equals the value.</li>
+      <li><code>tier!=db</code>: label is not <code>db</code>, <em>or the label is missing</em>.</li>
+      <li><code>env in (prod,staging)</code> and <code>env notin (dev)</code>: set-based. <code>notin</code> also matches objects without the label.</li>
+      <li><code>release</code> / <code>!release</code>: the label exists / does not exist.</li>
+    </ul>
+    <p>All requirements must match (logical AND). There is no OR: use <code>in (a,b)</code> for one key. Service <code>spec.selector</code> only supports equality, while Deployments, PDBs and NetworkPolicies accept <code>matchExpressions</code>.</p>
+    <pre><code set:text={`kubectl get pods -l 'app=api,env in (prod,staging),!canary' --show-labels`} /></pre>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { parseSelector, matchesRequirement, type Requirement, type Labels } from '../../lib/k8s-selector';
+  const $ = <T extends HTMLElement = HTMLTextAreaElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+  function readSelector(text: string): Requirement[] {
+    const t = text.trim();
+    if (/^(matchLabels|matchExpressions|selector)\s*:/m.test(t) || /^[\w./-]+:\s/m.test(t)) {
+      let obj: any = yaml.load(t);
+      if (obj?.selector) obj = obj.selector;
+      if (!obj || typeof obj !== 'object') throw new Error('Expected a YAML mapping.');
+      const sel = obj.matchLabels || obj.matchExpressions ? obj : { matchLabels: obj };
+      return [
+        ...Object.entries(sel.matchLabels ?? {}).map(([key, v]) => ({ key, operator: 'In' as const, values: [String(v)] })),
+        ...(sel.matchExpressions ?? []).map((r: any) => {
+          if (!['In', 'NotIn', 'Exists', 'DoesNotExist'].includes(r?.operator)) throw new Error(`Unknown operator “${r?.operator}”.`);
+          return { key: r.key, operator: r.operator, values: (r.values ?? []).map(String) };
+        }),
+      ];
+    }
+    return parseSelector(t);
+  }
+
+  function toString(reqs: Requirement[]) {
+    return reqs.map((r) => {
+      const v = r.values ?? [];
+      if (r.operator === 'Exists') return r.key;
+      if (r.operator === 'DoesNotExist') return `!${r.key}`;
+      if (v.length === 1) return `${r.key}${r.operator === 'In' ? '=' : '!='}${v[0]}`;
+      return `${r.key} ${r.operator === 'In' ? 'in' : 'notin'} (${v.join(',')})`;
+    }).join(',');
+  }
+  function toYaml(reqs: Requirement[]) {
+    const eq = reqs.filter((r) => r.operator === 'In' && r.values?.length === 1);
+    const rest = reqs.filter((r) => !eq.includes(r));
+    return yaml.dump({
+      selector: {
+        ...(eq.length && { matchLabels: Object.fromEntries(eq.map((r) => [r.key, r.values![0]])) }),
+        ...(rest.length && { matchExpressions: rest.map((r) => ({ key: r.key, operator: r.operator, ...(r.values?.length && { values: r.values }) })) }),
+      },
+    }, { flowLevel: 3, lineWidth: -1 });
+  }
+
+  const parseLabelList = (s: string): Labels =>
+    Object.fromEntries(s.trim() === '<none>' ? [] : s.split(',').map((p) => p.trim()).filter(Boolean).map((p) => {
+      const i = p.indexOf('=');
+      return i < 0 ? [p, ''] : [p.slice(0, i), p.slice(i + 1)];
+    }));
+
+  function readObjects(text: string): { name: string; labels: Labels }[] {
+    const t = text.trim();
+    if (!t) return [];
+    if (/^(apiVersion|kind):/m.test(t)) {
+      return yaml.loadAll(t).filter((d: any) => d && typeof d === 'object').map((d: any) => ({
+        name: `${d.kind ?? '?'}/${d.metadata?.name ?? '?'}`,
+        labels: d.spec?.template?.metadata?.labels ?? d.spec?.jobTemplate?.spec?.template?.metadata?.labels ?? d.metadata?.labels ?? {},
+      }));
+    }
+    const lines = t.split('\n').filter((l) => l.trim());
+    if (/\bLABELS\s*$/.test(lines[0])) {
+      return lines.slice(1).map((l) => {
+        const cols = l.trim().split(/\s+/);
+        return { name: cols[0], labels: parseLabelList(cols[cols.length - 1]) };
+      });
+    }
+    return lines.map((l, i) => {
+      const m = /^([^:=\s]+):\s+(.*)$/.exec(l.trim());
+      return m ? { name: m[1], labels: parseLabelList(m[2]) } : { name: `#${i + 1}`, labels: parseLabelList(l) };
+    });
+  }
+
+  const describe = (r: Requirement) => {
+    const v = (r.values ?? []).join(', ');
+    switch (r.operator) {
+      case 'In': return r.values?.length === 1 ? `${r.key}=${v}` : `${r.key} in (${v})`;
+      case 'NotIn': return r.values?.length === 1 ? `${r.key}!=${v}` : `${r.key} notin (${v})`;
+      case 'Exists': return `has ${r.key}`;
+      case 'DoesNotExist': return `no ${r.key}`;
+    }
+  };
+
+  function run() {
+    const selErr = $('sel-err'), labErr = $('lab-err'), out = $('out'), summary = $('summary');
+    selErr.textContent = ''; labErr.textContent = ''; out.innerHTML = ''; summary.textContent = ''; $('forms').hidden = true;
+    const selText = $('sel').value;
+    if (!selText.trim()) return;
+    let reqs: Requirement[];
+    try { reqs = readSelector(selText); } catch (e) { selErr.textContent = (e as Error).message.split('\n')[0]; return; }
+    $('forms').hidden = false;
+    $('as-string').textContent = toString(reqs) || '(empty selector: matches everything)';
+    $('as-yaml').textContent = toYaml(reqs);
+
+    let objs: { name: string; labels: Labels }[];
+    try { objs = readObjects($('labels').value); } catch (e) { labErr.textContent = `Could not read labels: ${(e as Error).message.split('\n')[0]}`; return; }
+    if (!objs.length) return;
+    const results = objs.map((o) => ({ ...o, failed: reqs.filter((r) => !matchesRequirement(r, o.labels)) }));
+    const hits = results.filter((r) => !r.failed.length).length;
+    summary.textContent = `${hits} of ${results.length} match.`;
+    out.innerHTML = `<thead><tr><th>Match</th><th>Name</th><th>Labels</th><th>Why not</th></tr></thead><tbody>` + results.map((r) => `
+      <tr class="${r.failed.length ? 'miss' : 'hit'}">
+        <td>${r.failed.length ? '<span class="status-err">✗ No</span>' : '<span class="status-ok">✓ Yes</span>'}</td>
+        <td><code>${esc(r.name)}</code></td>
+        <td>${Object.entries(r.labels).map(([k, v]) => `<code class="lab">${esc(k)}${v === '' ? '' : `=${esc(String(v))}`}</code>`).join(' ') || '<span class="muted">none</span>'}</td>
+        <td>${r.failed.map((f) => `<span class="muted">needs ${esc(describe(f)!)}</span>`).join('<br>')}</td>
+      </tr>`).join('') + '</tbody>';
+  }
+  $('sel').addEventListener('input', run);
+  $('labels').addEventListener('input', run);
+  $('load-sample').addEventListener('click', () => {
+    const [s, l] = JSON.parse($('sample').textContent!);
+    $('sel').value = s; $('labels').value = l;
+    run();
+  });
+</script>
+
+<style>
+  .short { min-height: 4.5rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .forms { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+  .forms[hidden] { display: none; }
+  .lbl { display: block; font-size: 0.85rem; color: var(--ink-soft); margin-bottom: 0.25rem; }
+  .summary { font-weight: 700; margin: 0; }
+  .lab { display: inline-block; margin: 0 0.25rem 0.25rem 0; font-size: 0.8rem; }
+  tr.miss td { opacity: 0.85; }
+  @media (max-width: 640px) { .forms { grid-template-columns: 1fr; } }
+</style>

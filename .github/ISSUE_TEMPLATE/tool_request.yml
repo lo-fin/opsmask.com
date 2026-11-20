@@ -1,0 +1,22 @@
+name: Tool request
+description: Suggest a new browser-based tool
+labels: [tool-request]
+body:
+  - type: input
+    id: name
+    attributes: { label: Tool name, placeholder: "e.g. Terraform plan summarizer" }
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes: { label: What problem does it solve?, description: When would you reach for it during real work? }
+    validations: { required: true }
+  - type: textarea
+    id: example
+    attributes: { label: Example input and expected output, render: text }
+  - type: checkboxes
+    id: local
+    attributes:
+      label: Privacy
+      options:
+        - label: This tool can work entirely in the browser without calling an external API
+          required: true

@@ -1,0 +1,197 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const sample = `apiVersion: apps/v1
+kind: Deployment
+metadata: { name: api }
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: api
+          image: api:1.4.2
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+        - name: proxy
+          image: envoy:1.31
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+`;
+---
+<ToolShell slug="k8s-resource-calculator">
+  <section class="block">
+    <h2>Convert a quantity</h2>
+    <div>
+      <label for="qty">Quantity</label>
+      <input id="qty" type="text" class="code" value="1.5Gi" spellcheck="false" />
+    </div>
+    <p id="qty-err" class="status-err" aria-live="polite"></p>
+    <div class="table-wrap"><table id="qty-out"></table></div>
+    <p id="qty-note" class="note" hidden></p>
+  </section>
+
+  <section class="block">
+    <h2>How many pods fit on a node</h2>
+    <div class="grid">
+      <div><label for="pod-cpu">CPU request per pod</label><input id="pod-cpu" type="text" class="code" value="300m" /></div>
+      <div><label for="pod-mem">Memory request per pod</label><input id="pod-mem" type="text" class="code" value="576Mi" /></div>
+      <div><label for="replicas">Replicas</label><input id="replicas" type="text" class="code" value="12" inputmode="numeric" /></div>
+      <div><label for="node-cpu">Node allocatable CPU</label><input id="node-cpu" type="text" class="code" value="3860m" /></div>
+      <div><label for="node-mem">Node allocatable memory</label><input id="node-mem" type="text" class="code" value="12.5Gi" /></div>
+      <div><label for="max-pods">Max pods per node</label><input id="max-pods" type="text" class="code" value="110" inputmode="numeric" /></div>
+      <div><label for="ds-cpu">DaemonSet CPU per node</label><input id="ds-cpu" type="text" class="code" value="400m" title="DaemonSets and system pods: CPU" /></div>
+      <div><label for="ds-mem">DaemonSet memory per node</label><input id="ds-mem" type="text" class="code" value="700Mi" title="DaemonSets and system pods: memory" /></div>
+      <div><label for="ds-pods">DaemonSet pods per node</label><input id="ds-pods" type="text" class="code" value="8" inputmode="numeric" title="DaemonSets and system pods: count" /></div>
+    </div>
+    <p id="fit-err" class="status-err" aria-live="polite"></p>
+    <div id="fit-out" class="fit"></div>
+  </section>
+
+  <section class="block">
+    <div class="row">
+      <h2>Total requests from manifests</h2>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <label for="manifest">Manifests (YAML)</label>
+    <textarea id="manifest" class="code" spellcheck="false" placeholder="Paste Deployments, StatefulSets, DaemonSets, Jobs…"></textarea>
+    <p id="sum-err" class="status-err" aria-live="polite"></p>
+    <div class="table-wrap"><table id="sum-out"></table></div>
+  </section>
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Units that catch people out</h2>
+    <p><code>Mi</code> and <code>Gi</code> are powers of 1024; <code>M</code> and <code>G</code> are powers of 1000, so <code>1G</code> is only 0.93Gi. A lower-case <code>m</code> means milli: <code>memory: 128m</code> is 0.128 bytes, not 128 megabytes. CPU <code>1</code> is one vCPU, and <code>100m</code> is a tenth of one.</p>
+    <h2>Where to find allocatable</h2>
+    <p>Allocatable is node capacity minus what the kubelet and OS reserve. On AKS that is noticeably less than the VM size. Read it from the cluster, and sum what DaemonSets already request:</p>
+    <pre><code set:text={`kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory,PODS:.status.allocatable.pods
+kubectl describe node <node> | sed -n '/Allocated resources/,/Events/p'`} /></pre>
+    <p>A pod’s request is the sum of its containers, or its largest init container if that is bigger. Sidecars (init containers with <code>restartPolicy: Always</code>) count toward the sum. If only a limit is set, the request defaults to the limit.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { parseQuantity, formatCpu, formatBytes, formatBytesDecimal } from '../../lib/k8s-quantity';
+  import { podSpecOf } from '../../lib/k8s-check';
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  const num = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+
+  // 1. Quantity converter
+  function convert() {
+    const raw = $('qty').value.trim();
+    const out = $('qty-out'), err = $('qty-err'), note = $('qty-note');
+    out.innerHTML = ''; err.textContent = ''; note.hidden = true;
+    if (!raw) return;
+    const v = parseQuantity(raw);
+    if (v == null) {
+      err.textContent = /^\d+(\.\d+)?\s*(K|KB|MB|GB|kb|mb|gb|Kib|mib|gib)$/.test(raw)
+        ? 'Not a Kubernetes quantity. Use Ki, Mi, Gi (1024) or k, M, G (1000), with no B.'
+        : 'Not a valid quantity. Examples: 500m, 2, 512Mi, 1.5Gi, 1G.';
+      return;
+    }
+    out.innerHTML = [
+      ['As CPU', /(Ki|Mi|Gi|Ti|Pi|Ei)$/.test(raw) ? '<span class="muted">not a CPU value</span>' : `${num(v)} cores · ${num(v * 1000)}m`],
+      ['As memory', `${num(v)} bytes`],
+      ['Binary units', `${formatBytes(v)} · ${num(v / 2 ** 20)} Mi · ${num(v / 2 ** 30)} Gi`],
+      ['Decimal units', `${formatBytesDecimal(v)} · ${num(v / 1e6)} M · ${num(v / 1e9)} G`],
+    ].map(([k, x]) => `<tr><th>${k}</th><td>${x.startsWith('<') ? x : `<code>${x}</code>`}</td></tr>`).join('');
+    const notes: string[] = [];
+    if (/\dm$/.test(raw)) notes.push(`As memory, “${raw}” is ${num(v)} bytes. If you meant megabytes, write ${raw.slice(0, -1)}Mi.`);
+    if (/\d(k|M|G|T)$/.test(raw)) notes.push(`${raw} uses decimal units. The binary equivalent is ${formatBytes(v)}.`);
+    if (notes.length) { note.hidden = false; note.textContent = notes.join(' '); }
+  }
+
+  // 2. Bin-packing estimate
+  function fit() {
+    const out = $('fit-out'), err = $('fit-err');
+    out.innerHTML = ''; err.textContent = '';
+    const q = (id: string) => parseQuantity($(id).value);
+    const vals = { podCpu: q('pod-cpu'), podMem: q('pod-mem'), nodeCpu: q('node-cpu'), nodeMem: q('node-mem'), dsCpu: q('ds-cpu') ?? 0, dsMem: q('ds-mem') ?? 0 };
+    const replicas = parseInt($('replicas').value, 10), maxPods = parseInt($('max-pods').value, 10), dsPods = parseInt($('ds-pods').value, 10) || 0;
+    if (Object.values(vals).some((x) => x == null) || !(replicas > 0) || !(maxPods > 0)) { err.textContent = 'Fill in every field with a valid quantity.'; return; }
+    const { podCpu, podMem, nodeCpu, nodeMem, dsCpu, dsMem } = vals as Record<string, number>;
+    const freeCpu = nodeCpu - dsCpu, freeMem = nodeMem - dsMem, freePods = maxPods - dsPods;
+    if (freeCpu <= 0 || freeMem <= 0 || freePods <= 0) { err.textContent = 'Nothing left on the node after the already-requested resources.'; return; }
+    const by = {
+      CPU: podCpu > 0 ? Math.floor(freeCpu / podCpu) : Infinity,
+      memory: podMem > 0 ? Math.floor(freeMem / podMem) : Infinity,
+      'pod count': freePods,
+    };
+    const [limit, perNode] = Object.entries(by).sort((a, b) => a[1] - b[1])[0];
+    if (perNode < 1) { out.innerHTML = `<p class="status-err"><strong>A single pod does not fit.</strong> It needs more ${limit} than a node has left.</p>`; return; }
+    const nodes = Math.ceil(replicas / perNode);
+    const usedCpu = Math.min(replicas, perNode) * podCpu, usedMem = Math.min(replicas, perNode) * podMem;
+    out.innerHTML = `
+      <p class="big"><strong>${perNode}</strong> pods per node · <strong>${nodes}</strong> node${nodes > 1 ? 's' : ''} for ${replicas} replicas</p>
+      <p>Limited by <strong>${limit}</strong>. A full node uses ${formatCpu(usedCpu + dsCpu)} of ${formatCpu(nodeCpu)} CPU (${Math.round(((usedCpu + dsCpu) / nodeCpu) * 100)}%) and ${formatBytes(usedMem + dsMem)} of ${formatBytes(nodeMem)} memory (${Math.round(((usedMem + dsMem) / nodeMem) * 100)}%).</p>
+      <p class="muted">Leave one node of headroom so a drain or upgrade can reschedule pods: plan for ${nodes + 1}.</p>`;
+  }
+
+  // 3. Totals from manifests
+  type Res = { cpu: number; memory: number };
+  const request = (c: any, r: 'cpu' | 'memory', from: 'requests' | 'limits') =>
+    parseQuantity(c?.resources?.[from]?.[r] ?? (from === 'requests' ? c?.resources?.limits?.[r] : undefined)) ?? 0;
+  // For limits, one container without a limit makes the whole pod unbounded (NaN).
+  function podTotal(pod: any, from: 'requests' | 'limits'): Res {
+    const one = (c: any, r: 'cpu' | 'memory') => (from === 'limits' && c?.resources?.limits?.[r] == null ? NaN : request(c, r, from));
+    const sum = (list: any[], r: 'cpu' | 'memory') => list.reduce((s, c) => s + one(c, r), 0);
+    const inits: any[] = pod.initContainers ?? [];
+    const sidecars = inits.filter((c) => c?.restartPolicy === 'Always');
+    const plain = inits.filter((c) => c?.restartPolicy !== 'Always');
+    const eff = (r: 'cpu' | 'memory') => Math.max(sum([...(pod.containers ?? []), ...sidecars], r), ...plain.map((c) => one(c, r)), 0);
+    return { cpu: eff('cpu'), memory: eff('memory') };
+  }
+  function totals() {
+    const out = $('sum-out'), err = $('sum-err'), text = $<HTMLTextAreaElement>('manifest').value;
+    out.innerHTML = ''; err.textContent = '';
+    if (!text.trim()) return;
+    let docs: any[];
+    try { docs = yaml.loadAll(text).filter((d) => d && typeof d === 'object'); }
+    catch (e) { err.textContent = `YAML error: ${(e as Error).message.split('\n')[0]}`; return; }
+    const rows = docs.map((d) => ({ d, pod: podSpecOf(d) })).filter((x) => x.pod && ['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet', 'Job', 'CronJob', 'Pod'].includes(x.d.kind));
+    if (!rows.length) { err.textContent = 'No workloads found.'; return; }
+    const total = { rc: 0, rm: 0, lc: 0, lm: 0 };
+    const cell = (v: number, f: (n: number) => string) => (Number.isNaN(v) ? '<span class="muted">no limit</span>' : v ? f(v) : '<span class="muted">–</span>');
+    const body = rows.map(({ d, pod }) => {
+      const ds = d.kind === 'DaemonSet';
+      const n = ds ? 1 : d.kind === 'Job' || d.kind === 'CronJob' ? (d.spec?.parallelism ?? d.spec?.jobTemplate?.spec?.parallelism ?? 1) : (d.spec?.replicas ?? 1);
+      const req = podTotal(pod, 'requests'), lim = podTotal(pod, 'limits');
+      total.rc += req.cpu * n; total.rm += req.memory * n; total.lc += lim.cpu * n; total.lm += lim.memory * n;
+      return `<tr><td>${esc(`${d.kind}/${d.metadata?.name ?? '?'}`)}</td><td>${ds ? '1 per node' : n}</td>
+        <td>${cell(req.cpu * n, formatCpu)}</td><td>${cell(req.memory * n, formatBytes)}</td>
+        <td>${cell(lim.cpu * n, formatCpu)}</td><td>${cell(lim.memory * n, formatBytes)}</td></tr>`;
+    }).join('');
+    out.innerHTML = `<thead><tr><th>Workload</th><th>Pods</th><th>CPU request</th><th>Memory request</th><th>CPU limit</th><th>Memory limit</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><th>Total</th><th></th><th>${cell(total.rc, formatCpu)}</th><th>${cell(total.rm, formatBytes)}</th><th>${cell(total.lc, formatCpu)}</th><th>${cell(total.lm, formatBytes)}</th></tr></tfoot>`;
+  }
+
+  $('qty').addEventListener('input', convert);
+  document.querySelectorAll('.grid input').forEach((el) => el.addEventListener('input', fit));
+  $('manifest').addEventListener('input', totals);
+  $('load-sample').addEventListener('click', () => {
+    $<HTMLTextAreaElement>('manifest').value = JSON.parse($('sample').textContent!);
+    totals();
+  });
+  convert(); fit();
+</script>
+
+<style>
+  .block { display: grid; gap: 0.6rem; }
+  .block h2 { font-size: 1.15rem; margin: 0; }
+  .block + .block { padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem 1rem; }
+  .grid label { font-size: 0.9rem; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .note { margin: 0; color: var(--warn); }
+  .fit p { margin: 0 0 0.4rem; }
+  .fit .big { font-size: 1.15rem; }
+  #qty-out th { width: 9rem; }
+  tfoot th { color: var(--ink); }
+  @media (max-width: 640px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>

@@ -1,0 +1,234 @@
+---
+import Base from '../../layouts/Base.astro';
+import { TOOLS, TOOL_GROUPS } from '../../data/tools';
+const groups = TOOL_GROUPS.map((g) => ({ name: g, tools: TOOLS.filter((t) => t.group === g) })).filter((g) => g.tools.length);
+---
+<Base title="Tools" description="Browser-based DevOps tools: Kubernetes, networking, encoding, cron and data formats." wide>
+  <header class="page-head">
+    <div class="head-top">
+      <div>
+        <span class="badge badge-accent">100% Client-Side · Offline Ready</span>
+        <h1>DevOps &amp; Kubernetes Tools</h1>
+        <p class="muted">Every tool runs locally in your browser tab. Nothing you paste is ever uploaded.</p>
+      </div>
+      <div class="filter-box">
+        <label for="tools-filter" class="sr-only">Filter tools</label>
+        <input id="tools-filter" type="search" class="code" placeholder={`Filter ${TOOLS.length} tools by name or keyword…`} autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
+
+    <div class="group-pills" role="navigation" aria-label="Jump to category">
+      {groups.map((g) => (
+        <a class="group-pill" href={`#group-${g.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+          <span>{g.name}</span>
+          <span class="pill-count">{g.tools.length}</span>
+        </a>
+      ))}
+    </div>
+  </header>
+
+  <div id="tools-directory">
+    {groups.map((g) => (
+      <section class="group" id={`group-${g.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} data-tool-section>
+        <div class="group-head">
+          <h2>{g.name}</h2>
+          <span class="badge">{g.tools.length} {g.tools.length === 1 ? 'tool' : 'tools'}</span>
+        </div>
+        <ul class="cards">
+          {g.tools.map((t) => (
+            <li class="card" data-tool-card data-keywords={`${t.title} ${t.description} ${t.group} ${t.keywords.join(' ')}`.toLowerCase()}>
+              <a href={`/tools/${t.slug}/`}>
+                <div class="card-head">
+                  <h3>{t.title}</h3>
+                  <span class="arrow" aria-hidden="true">→</span>
+                </div>
+                <p>{t.description}</p>
+                <div class="kw-row">
+                  {t.keywords.slice(0, 4).map((kw) => <span class="kw">{kw}</span>)}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </div>
+</Base>
+
+<script>
+  const input = document.getElementById('tools-filter') as HTMLInputElement | null;
+  if (input) {
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      document.querySelectorAll<HTMLElement>('[data-tool-section]').forEach((sec) => {
+        let shown = 0;
+        sec.querySelectorAll<HTMLElement>('[data-tool-card]').forEach((card) => {
+          const match = !q || (card.dataset.keywords ?? '').includes(q);
+          card.hidden = !match;
+          if (match) shown++;
+        });
+        sec.hidden = shown === 0;
+      });
+    });
+  }
+</script>
+
+<style>
+  .page-head {
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .head-top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.25rem;
+  }
+
+  .page-head h1 {
+    margin: 0.45rem 0 0.35rem;
+  }
+
+  .page-head p {
+    margin: 0;
+  }
+
+  .filter-box {
+    width: min(22rem, 100%);
+  }
+
+  .group-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 1.25rem;
+  }
+
+  .group-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.32rem 0.72rem;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+
+  .group-pill:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    text-decoration: none;
+  }
+
+  .pill-count {
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+  }
+
+  .group {
+    margin-top: 2.5rem;
+  }
+
+  .group[hidden],
+  .card[hidden] {
+    display: none;
+  }
+
+  .group-head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+  }
+
+  .group-head h2 {
+    margin: 0;
+  }
+
+  .cards {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: 1rem;
+  }
+
+  .card a {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1.15rem 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    color: var(--ink);
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .card a:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .card h3 {
+    font-size: 0.98rem;
+    margin: 0;
+    color: var(--ink);
+  }
+
+  .arrow {
+    font-family: var(--font-code);
+    color: var(--ink-muted);
+    transition: transform 150ms ease, color 150ms ease;
+  }
+
+  .card a:hover .arrow {
+    transform: translateX(3px);
+    color: var(--accent);
+  }
+
+  .card p {
+    margin: 0 0 0.85rem;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  .kw-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .kw {
+    font-family: var(--font-code);
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+  }
+</style>

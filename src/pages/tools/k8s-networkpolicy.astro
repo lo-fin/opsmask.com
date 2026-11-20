@@ -1,0 +1,165 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const sample = `apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: prod
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-allow-web
+  namespace: prod
+spec:
+  podSelector:
+    matchLabels: { app: api }
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: web }
+        - namespaceSelector:
+            matchLabels: { team: monitoring }
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-egress
+  namespace: prod
+spec:
+  podSelector:
+    matchLabels: { app: web }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: api }
+      ports:
+        - { protocol: TCP, port: 8080 }
+`;
+---
+<ToolShell slug="k8s-networkpolicy">
+  <div>
+    <div class="row">
+      <label for="src">NetworkPolicies (YAML)</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea id="src" class="code tall" spellcheck="false"></textarea>
+    <p id="err" class="status-err" aria-live="polite"></p>
+  </div>
+  <div id="out" class="out-wrap"></div>
+
+  <section class="test">
+    <h2>Test a connection</h2>
+    <div class="grid">
+      <fieldset>
+        <legend>Source pod</legend>
+        <label for="s-ns">Namespace</label><input id="s-ns" type="text" class="code" value="prod" />
+        <label for="s-labels">Pod labels</label><input id="s-labels" type="text" class="code" value="app=web" />
+        <label for="s-nslabels">Namespace labels</label><input id="s-nslabels" type="text" class="code" value="" placeholder="optional, e.g. team=web" />
+      </fieldset>
+      <fieldset>
+        <legend>Destination pod</legend>
+        <label for="d-ns">Namespace</label><input id="d-ns" type="text" class="code" value="prod" />
+        <label for="d-labels">Pod labels</label><input id="d-labels" type="text" class="code" value="app=api" />
+        <label for="d-nslabels">Namespace labels</label><input id="d-nslabels" type="text" class="code" value="" placeholder="optional" />
+      </fieldset>
+      <fieldset>
+        <legend>Port</legend>
+        <label for="port">Port number or name</label><input id="port" type="text" class="code" value="8080" />
+        <label for="proto">Protocol</label>
+        <select id="proto"><option>TCP</option><option>UDP</option><option>SCTP</option></select>
+      </fieldset>
+    </div>
+    <div id="verdict" class="verdict" aria-live="polite"></div>
+  </section>
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Rules to remember</h2>
+    <ul>
+      <li>Pods are open until a policy selects them. Once any policy selects a pod for Ingress or Egress, only what some policy allows gets through.</li>
+      <li>Policies add up. There is no deny rule: you cannot block what another policy allows.</li>
+      <li>A connection needs both sides: egress allowed from the source and ingress allowed to the destination.</li>
+      <li>Items in a <code>from</code> or <code>to</code> list are OR. Selectors inside the same item are AND.</li>
+      <li>Every namespace has the label <code>kubernetes.io/metadata.name</code>, so you can select a namespace by name.</li>
+      <li>Policies need a CNI that enforces them (Azure NPM, Calico, Cilium). Without one they are silently ignored.</li>
+    </ul>
+    <pre><code set:text={`kubectl get networkpolicy -A
+kubectl run tmp --rm -it --image=nicolaka/netshoot -n prod -l app=web -- curl -m 3 api:8080`} /></pre>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { explainPolicies, evaluate } from '../../lib/k8s-netpol';
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  const labels = (s: string) => Object.fromEntries(s.split(',').map((p) => p.trim()).filter(Boolean).map((p) => {
+    const i = p.indexOf('=');
+    return i < 0 ? [p, ''] : [p.slice(0, i).trim(), p.slice(i + 1).trim()];
+  }));
+  let docs: any[] = [];
+
+  function explain() {
+    const out = $('out'), err = $('err');
+    out.innerHTML = ''; err.textContent = ''; docs = [];
+    const text = $<HTMLTextAreaElement>('src').value;
+    if (text.trim()) {
+      try { docs = yaml.loadAll(text).flatMap((d: any) => (Array.isArray(d?.items) ? d.items : [d])).filter((d) => d && typeof d === 'object'); }
+      catch (e) { err.textContent = `YAML error: ${(e as Error).message.split('\n')[0]}`; }
+      const policies = explainPolicies(docs);
+      if (!policies.length && !err.textContent) err.textContent = 'No NetworkPolicy found.';
+      out.innerHTML = policies.map((p) => `
+        <div class="card">
+          <h3>${esc(p.id)}</h3>
+          <p>Applies to ${esc(p.appliesTo)}.</p>
+          ${p.ingress.length ? `<p class="dir">Ingress</p><ul>${p.ingress.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          ${p.egress.length ? `<p class="dir">Egress</p><ul>${p.egress.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          ${p.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}
+        </div>`).join('');
+    }
+    test();
+  }
+
+  function test() {
+    const v = $('verdict');
+    if (!docs.length) { v.innerHTML = '<p class="muted">Paste policies above to test a connection.</p>'; return; }
+    const ep = (p: string) => ({ ns: $(`${p}-ns`).value.trim() || 'default', labels: labels($(`${p}-labels`).value), nsLabels: labels($(`${p}-nslabels`).value) });
+    const r = evaluate(docs, ep('s'), ep('d'), $('port').value.trim(), $<HTMLSelectElement>('proto').value);
+    v.innerHTML = `<p class="big ${r.allowed ? 'status-ok' : 'status-err'}">${r.allowed ? '✓ Allowed' : '✗ Blocked'}</p><ul>${r.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  }
+
+  $('src').addEventListener('input', explain);
+  document.querySelectorAll('.test input, .test select').forEach((el) => el.addEventListener('input', test));
+  $('load-sample').addEventListener('click', () => { $<HTMLTextAreaElement>('src').value = JSON.parse($('sample').textContent!); explain(); });
+  test();
+</script>
+
+<style>
+  .tall { min-height: 16rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .out-wrap :global(.card) { background: var(--surface); border-radius: var(--radius-m); padding: 0.75rem 1rem; margin-bottom: 0.6rem; }
+  .out-wrap :global(.card h3) { font-size: 1rem; margin: 0 0 0.35rem; }
+  .out-wrap :global(.card p) { margin: 0 0 0.3rem; }
+  .out-wrap :global(.card ul) { margin: 0 0 0.4rem; padding-left: 1.1rem; }
+  .out-wrap :global(.dir) { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); }
+  .out-wrap :global(.note) { color: var(--warn); font-size: 0.95rem; }
+  .test { padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  .test h2 { font-size: 1.15rem; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  fieldset { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.6rem 0.8rem; margin: 0; display: grid; gap: 0.25rem; }
+  fieldset legend { font-weight: 700; padding-inline: 0.3rem; }
+  fieldset label { font-size: 0.85rem; margin: 0.3rem 0 0; }
+  .verdict { margin-top: 0.75rem; }
+  .verdict .big { font-size: 1.2rem; font-weight: 700; margin: 0 0 0.25rem; }
+  .verdict ul { margin: 0; padding-left: 1.1rem; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>

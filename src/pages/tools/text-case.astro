@@ -1,0 +1,138 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sample = `maxRetryCount_v2`;
+---
+<ToolShell slug="text-case">
+  <div class="block">
+    <div class="row">
+      <label for="case-in">Input text or identifier</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea
+      id="case-in"
+      class="code short-ta"
+      spellcheck="false"
+      placeholder="Type or paste an identifier or phrase, e.g. databaseConnectionString or MAX_RETRY_COUNT…"
+    ></textarea>
+
+    <div id="results-wrap" class="results" hidden>
+      <table class="fixed-table">
+        <thead>
+          <tr>
+            <th class="key-col">Format</th>
+            <th class="val-col">Result</th>
+            <th class="act-col"><span class="sr-only">Copy</span></th>
+          </tr>
+        </thead>
+        <tbody id="case-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Multi-line support</h2>
+    <p>If you paste multiple lines of identifiers, each line is converted independently so you can copy the whole converted block at once.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { convertCases, type CaseItem } from '../../lib/text-tools';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const inputEl = $<HTMLTextAreaElement>('case-in');
+  const wrapEl = $('results-wrap');
+  const tbodyEl = $('case-body');
+
+  let items: CaseItem[] = [];
+
+  function run() {
+    items = convertCases(inputEl.value);
+    wrapEl.hidden = items.length === 0;
+    if (!items.length) return;
+
+    tbodyEl.innerHTML = items
+      .map((item, idx) => {
+        const singleLine = item.value.replace(/\r?\n/g, ' ↵ ');
+        return `<tr>
+          <td class="key-cell"><code>${esc(item.label)}</code></td>
+          <td class="val-cell"><span class="val" id="val-${idx}" title="${esc(item.value)}">${esc(singleLine)}</span></td>
+          <td class="act-col">
+            <button class="btn ghost copy-val-btn" type="button" data-copy-val="${idx}">Copy</button>
+          </td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  tbodyEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-copy-val]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.copyVal);
+    const item = items[idx];
+    if (item) copyText(btn, item.value, document.getElementById(`val-${idx}`));
+  });
+
+  inputEl.addEventListener('input', run);
+  $('load-sample').addEventListener('click', () => {
+    inputEl.value = JSON.parse($('sample').textContent!);
+    run();
+  });
+</script>
+
+<style>
+  .block { display: grid; gap: 0.75rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.25rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .short-ta { min-height: 5.5rem; }
+  .results[hidden] { display: none; }
+  .fixed-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .fixed-table th,
+  .fixed-table td {
+    vertical-align: middle;
+  }
+  .key-col,
+  .key-cell {
+    width: 32%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val-col,
+  .val-cell {
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+  }
+  .act-col {
+    width: 6.25rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .copy-val-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.9rem;
+  }
+  @media (max-width: 640px) {
+    .key-col, .key-cell { width: 38%; }
+  }
+</style>

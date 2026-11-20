@@ -1,0 +1,107 @@
+---
+// One ad per page, never between a tool's input and output, never a popup.
+// Height is reserved so the page does not jump when the ad loads.
+import { SITE } from '../config';
+interface Props { variant?: 'sidebar' | 'inline' }
+const { variant = 'inline' } = Astro.props;
+const { provider, carbon, ethicalads, adsense } = SITE.ads;
+const useCarbon = provider === 'carbon' && carbon.serve && carbon.placement;
+const useEA = provider === 'ethicalads' && ethicalads.publisher;
+const useAdSenseSlot = provider === 'adsense' && adsense.clientId && adsense.slotId;
+const { kofi } = SITE.support;
+---
+<aside class:list={['ad', variant]} aria-label={useCarbon || useEA || useAdSenseSlot ? 'Sponsor' : 'Support OpsMask'}>
+  {useCarbon && (
+    <>
+      <p class="ad-label">Sponsor</p>
+      <div class="ad-box">
+        <script async src={`https://cdn.carbonads.com/carbon.js?serve=${carbon.serve}&placement=${carbon.placement}&format=cover`} id="_carbonads_js"></script>
+      </div>
+    </>
+  )}
+  {useEA && (
+    <>
+      <p class="ad-label">Sponsor</p>
+      <div class="ad-box">
+        <div data-ea-publisher={ethicalads.publisher} data-ea-type="image" class:list={[variant === 'sidebar' ? 'vertical' : 'horizontal']}></div>
+        <script async src="https://media.ethicalads.io/media/client/ethicalads.min.js"></script>
+      </div>
+    </>
+  )}
+  {useAdSenseSlot && (
+    <>
+      <p class="ad-label">Advertisement</p>
+      <div class="ad-box">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client={adsense.clientId}
+             data-ad-slot={adsense.slotId}
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script is:inline>
+          try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
+        </script>
+      </div>
+    </>
+  )}
+  {!useCarbon && !useEA && !useAdSenseSlot && (
+    <div class="house">
+      <div class="house-badge">OPEN SOURCE</div>
+      <p><strong>{SITE.name} is free and 100% client-side.</strong> No accounts, no backend, no server uploads.</p>
+      <p class="house-links">
+        {kofi && <a class="btn small" href={kofi} target="_blank" rel="noopener">Support on Ko-fi</a>}
+        <a class="btn ghost small" href={SITE.repo} target="_blank" rel="noopener">Star on GitHub</a>
+      </p>
+    </div>
+  )}
+</aside>
+
+<style>
+  .ad {
+    font-size: 0.88rem;
+  }
+  .ad.inline {
+    margin-block: 2.5rem 0;
+    max-width: 48rem;
+  }
+  .ad-label {
+    margin: 0 0 0.35rem;
+    color: var(--ink-muted);
+    font-family: var(--font-code);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .ad-box {
+    min-height: 120px;
+  }
+  .sidebar .ad-box {
+    min-height: 240px;
+  }
+  .house {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    padding: 1rem 1.1rem;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
+  .house-badge {
+    display: inline-block;
+    font-family: var(--font-code);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--mask);
+    margin-bottom: 0.4rem;
+  }
+  .house p {
+    margin: 0 0 0.75rem;
+    line-height: 1.5;
+  }
+  .house-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 !important;
+  }
+</style>

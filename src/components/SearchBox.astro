@@ -1,0 +1,234 @@
+---
+interface Props { id: string; placeholder?: string; size?: 'hero' | 'compact'; autofocus?: boolean }
+const { id, placeholder = 'Search tools, cheatsheets, prompts…', size = 'compact', autofocus = false } = Astro.props;
+---
+<div class:list={['searchbox', size]} data-searchbox>
+  <label for={id} class="sr-only">Search</label>
+  <div class="search-field">
+    <svg class="search-icon" viewBox="0 0 20 20" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="9" r="6"></circle>
+      <path d="m13.5 13.5 4 4"></path>
+    </svg>
+    <input id={id} type="search" autocomplete="off" spellcheck="false" placeholder={placeholder} autofocus={autofocus} />
+    <span class="search-kbd" aria-hidden="true"><kbd>/</kbd></span>
+  </div>
+  <ul role="listbox" aria-label="Search results" hidden></ul>
+</div>
+
+<script>
+  import { bindSearch } from '../scripts/search';
+  document.querySelectorAll<HTMLElement>('[data-searchbox]').forEach((box) => {
+    bindSearch(box.querySelector('input')!, box.querySelector('ul')!);
+  });
+</script>
+
+<style is:global>
+  .searchbox {
+    position: relative;
+  }
+
+  .search-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 0.85rem;
+    color: var(--ink-muted);
+    pointer-events: none;
+    transition: color 150ms ease;
+  }
+
+  .search-field:focus-within .search-icon {
+    color: var(--accent);
+  }
+
+  .searchbox input {
+    padding-left: 2.45rem;
+    padding-right: 2.6rem;
+    font-family: var(--font-code);
+    font-size: 0.88rem;
+    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+  }
+
+  .search-kbd {
+    position: absolute;
+    right: 0.65rem;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.85;
+    transition: opacity 150ms ease;
+  }
+
+  .search-field:focus-within .search-kbd {
+    opacity: 0;
+  }
+
+  .searchbox.hero .search-icon {
+    left: 1.05rem;
+    width: 19px;
+    height: 19px;
+  }
+
+  .searchbox.hero input {
+    font-size: 1.02rem;
+    padding: 0.88rem 3.2rem 0.88rem 2.85rem;
+    border: 1.5px solid var(--line-strong);
+    border-radius: var(--radius-l);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+  }
+
+  .searchbox.hero input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent), var(--shadow-md);
+  }
+
+  .searchbox ul {
+    list-style: none;
+    margin: 0.45rem 0 0;
+    padding: 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-l);
+    max-height: min(62vh, 26rem);
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .searchbox.compact ul {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    min-width: 22rem;
+  }
+
+  .searchbox.hero ul {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 40;
+  }
+
+  .searchbox li a {
+    display: grid;
+    grid-template-columns: 5.8rem minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: var(--radius-m);
+    color: var(--ink);
+    text-decoration: none;
+    transition: background-color 120ms ease;
+  }
+
+  .searchbox li[aria-selected='true'] a,
+  .searchbox li a:hover {
+    background: var(--surface-2);
+    text-decoration: none;
+  }
+
+  .r-type {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    font-family: var(--font-code);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    background: var(--bg-subtle);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+  }
+
+  .r-type-tool {
+    color: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+
+  .r-type-prompt {
+    color: var(--warn);
+    border-color: color-mix(in srgb, var(--mask) 40%, transparent);
+    background: color-mix(in srgb, var(--mask) 14%, transparent);
+  }
+
+  .r-type-cheatsheet {
+    color: var(--cyan);
+    border-color: color-mix(in srgb, var(--cyan) 35%, transparent);
+    background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  }
+
+  .r-body {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .r-title {
+    font-weight: 700;
+    font-size: 0.94rem;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .r-desc {
+    color: var(--ink-soft);
+    font-size: 0.83rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .r-arrow {
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    opacity: 0;
+    transform: translateX(-3px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .searchbox li[aria-selected='true'] .r-arrow,
+  .searchbox li a:hover .r-arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: var(--accent);
+  }
+
+  .r-empty {
+    padding: 0.85rem 0.9rem;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 600px) {
+    .searchbox.compact ul {
+      min-width: 0;
+    }
+    .searchbox.hero input {
+      font-size: 0.95rem;
+    }
+    .searchbox li a {
+      grid-template-columns: 1fr;
+      row-gap: 0.25rem;
+    }
+    .r-type {
+      justify-self: start;
+    }
+    .r-arrow {
+      display: none;
+    }
+  }
+</style>

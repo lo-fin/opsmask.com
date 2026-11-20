@@ -1,0 +1,127 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+import { EXAMPLES } from '../../lib/k8s-pod-status.samples';
+---
+<ToolShell slug="k8s-pod-status">
+  <div class="input">
+    <div class="row">
+      <label for="src">Output of <code>kubectl describe pod</code> or <code>kubectl get pod -o yaml</code></label>
+      <span class="examples">
+        <select id="example" aria-label="Example">
+          {Object.entries(EXAMPLES).map(([k, e]) => <option value={k}>{e.label}</option>)}
+        </select>
+        <button class="btn ghost" type="button" id="load-sample">Load example</button>
+      </span>
+    </div>
+    <textarea id="src" class="code tall" spellcheck="false" placeholder="kubectl describe pod api-7d9c8b6f5-2kq9x -n prod"></textarea>
+    <p id="err" class="status-err" aria-live="polite"></p>
+  </div>
+  <div id="out" class="results" aria-live="polite"></div>
+  <script type="application/json" id="examples" set:html={JSON.stringify(Object.fromEntries(Object.entries(EXAMPLES).map(([k, e]) => [k, e.text]))).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>What to paste</h2>
+    <p><code>kubectl describe pod</code> gives the best answer because it includes recent events: scheduler messages, image pull errors and probe failures. YAML or JSON from <code>kubectl get pod -o yaml</code> works too, and so does a list of pods.</p>
+    <pre><code set:text={`kubectl describe pod <pod> -n <namespace>
+kubectl get pods -n <namespace> | grep -v Running
+kubectl get pods -n <namespace> -o yaml > pods.yaml`} /></pre>
+    <p>Describe output contains environment variables, which may include secrets. It stays in this tab, but run it through the <a href="/tools/k8s-redactor/">redactor</a> before sharing it anywhere else.</p>
+    <h2>Exit codes</h2>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Finished successfully. In a Deployment this still causes restarts, because it expects the process to keep running.</td></tr>
+        <tr><td>1</td><td>Application error. Read the logs.</td></tr>
+        <tr><td>126 / 127</td><td>Command cannot be executed / not found in the image.</td></tr>
+        <tr><td>137</td><td>SIGKILL: out of memory (OOMKilled), or killed after a failed liveness probe or shutdown timeout.</td></tr>
+        <tr><td>139</td><td>Segmentation fault.</td></tr>
+        <tr><td>143</td><td>SIGTERM: a normal shutdown, for example during a rollout.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { diagnose, parsePods } from '../../lib/k8s-pod-status';
+  import { copyText } from '../../scripts/copy';
+  const src = document.getElementById('src') as HTMLTextAreaElement;
+  const out = document.getElementById('out')!;
+  const err = document.getElementById('err')!;
+  const examples: Record<string, string> = JSON.parse(document.getElementById('examples')!.textContent!);
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const LABEL = { error: 'Problem', warn: 'Warning', info: 'Note', ok: 'Healthy' } as const;
+
+  function run() {
+    err.textContent = ''; out.innerHTML = '';
+    if (!src.value.trim()) return;
+    let reports;
+    try {
+      reports = parsePods(src.value, (t) => yaml.loadAll(t)).map(diagnose);
+    } catch (e) {
+      err.textContent = (e as Error).message.split('\n')[0];
+      return;
+    }
+    out.innerHTML = reports.map(({ pod, summary, diagnoses }) => `
+      <section class="pod">
+        <header>
+          <h2>${esc(pod.name)}</h2>
+          <span class="muted">${esc([pod.namespace && `namespace ${pod.namespace}`, pod.owner].filter(Boolean).join(' · '))}</span>
+          ${summary ? `<span class="state">${esc(summary)}</span>` : ''}
+        </header>
+        <ul>${diagnoses.map((d) => `
+          <li class="sev-${d.severity}">
+            <span class="sev">${LABEL[d.severity]}</span>
+            <div>
+              <strong>${esc(d.title)}</strong>
+              <p>${esc(d.detail)}</p>
+              ${d.next.length ? `<div class="next">${d.next.map((n) => `
+                <div class="cmd"><code>${esc(n)}</code><button type="button" class="btn ghost small" data-copy>Copy</button></div>`).join('')}</div>` : ''}
+            </div>
+          </li>`).join('')}
+        </ul>
+      </section>`).join('');
+  }
+
+  src.addEventListener('input', run);
+  document.getElementById('load-sample')!.addEventListener('click', () => {
+    src.value = examples[(document.getElementById('example') as HTMLSelectElement).value];
+    run();
+  });
+  out.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-copy]');
+    if (!btn) return;
+    const code = btn.parentElement!.querySelector('code')!;
+    copyText(btn, code.textContent ?? '', code);
+  });
+</script>
+
+<style>
+  .tall { min-height: 16rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; flex-wrap: wrap; }
+  .row label { margin: 0; }
+  /* Grid items default to min-width: auto; without this the example picker widens the page on phones. */
+  .input { min-width: 0; }
+  .examples { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; max-width: 100%; }
+  .examples select { width: auto; min-width: 0; flex: 1 1 auto; padding-block: 0.3rem; font-size: 0.9rem; }
+  .examples .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; white-space: nowrap; }
+  #err:empty { display: none; }
+  .results { display: grid; gap: 1rem; min-width: 0; }
+  .results :global(.pod) { background: var(--surface); border-radius: var(--radius-m); padding: 0.9rem 1rem; min-width: 0; }
+  .results :global(header) { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; margin-bottom: 0.6rem; }
+  .results :global(header h2) { font-size: 1.05rem; margin: 0; font-family: var(--font-code); word-break: break-all; }
+  .results :global(.state) { font-size: 0.85rem; font-weight: 700; padding: 0.05rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-s); }
+  .results :global(ul) { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+  .results :global(li) { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.75rem; padding-left: 0.75rem; border-left: 4px solid var(--line); }
+  .results :global(li p) { margin: 0.2rem 0 0.4rem; }
+  .results :global(.sev) { font-weight: 700; font-size: 0.9rem; }
+  .results :global(.sev-error) { border-left-color: var(--err); } .results :global(.sev-error .sev) { color: var(--err); }
+  .results :global(.sev-warn) { border-left-color: var(--mask); } .results :global(.sev-warn .sev) { color: var(--warn); }
+  .results :global(.sev-info .sev) { color: var(--ink-soft); }
+  .results :global(.sev-ok) { border-left-color: var(--ok); } .results :global(.sev-ok .sev) { color: var(--ok); }
+  .results :global(.next) { display: grid; gap: 0.3rem; }
+  .results :global(.cmd) { display: flex; gap: 0.5rem; align-items: center; min-width: 0; }
+  .results :global(.cmd code) { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 0.3rem 0.5rem; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-s); }
+  .results :global(.cmd .btn) { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+  @media (max-width: 520px) { .results :global(li) { grid-template-columns: 1fr; gap: 0.2rem; } }
+</style>

@@ -1,0 +1,63 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../config';
+const lastUpdated = 'November 20, 2026';
+---
+<Base title="Terms of Service" description={`Terms of Service and operational disclaimers for using ${SITE.name} tools, guides, cheatsheets, and AI prompt templates.`}>
+  <article class="policy-card prose">
+    <span class="badge badge-accent">Legal &amp; Terms</span>
+    <h1>Terms of Service</h1>
+    <p class="muted">Last updated: {lastUpdated}</p>
+    <p class="lede">By accessing or using {SITE.name} ({SITE.url}), you agree to the following Terms of Service. If you do not agree with these terms, please discontinue use of the website.</p>
+
+    <h2>1. Description of service</h2>
+    <p>{SITE.name} provides free, client-side DevOps utilities, Kubernetes helpers, CLI cheatsheets, engineering guides, and secret-masking AI prompt templates for informational and operational convenience.</p>
+
+    <h2>2. Open-source license &amp; intellectual property</h2>
+    <p>The source code of {SITE.name} is published on <a href={SITE.repo} rel="noopener">GitHub</a> under the MIT License unless otherwise noted. Original technical guides, editorial documentation, and site branding remain the property of {SITE.name} and its contributors.</p>
+
+    <h2>3. Operational &amp; security disclaimer</h2>
+    <p>Infrastructure changes carry inherent risk. While we write unit tests for our client-side tools and review our guides carefully, you are solely responsible for verifying every output before applying it to staging or production systems:</p>
+    <ul>
+      <li><strong>Secret redaction is best-effort:</strong> Automated pattern matching catches common credentials, tokens, and IP addresses, but cannot detect every custom or proprietary secret format. Always inspect the masked output before pasting it into an AI assistant, issue tracker, or public forum.</li>
+      <li><strong>Review generated commands and manifests:</strong> Always verify <code>kubectl</code> commands, RBAC manifests, NetworkPolicies, and shell scripts in a non-production environment or with <code>--dry-run=client</code> before executing them.</li>
+      <li><strong>JWT decoding does not verify signatures:</strong> Our JWT decoder parses header and payload claims for inspection only and does not validate cryptographic signatures against an issuer's JWKS.</li>
+    </ul>
+
+    <h2>4. No warranty &amp; limitation of liability</h2>
+    <p>{SITE.name} is provided on an <strong>"AS IS"</strong> and <strong>"AS AVAILABLE"</strong> basis without warranties of any kind, express or implied, including fitness for a particular purpose, accuracy, or non-infringement. To the maximum extent permitted by law, {SITE.name} and its maintainers shall not be liable for any direct, indirect, incidental, or consequential damages (including production downtime, misconfiguration, or data exposure) arising from your use of the site or its tools.</p>
+
+    <h2>5. Acceptable use</h2>
+    <p>You agree not to abuse, disrupt, or attempt to interfere with the availability of {SITE.name}, including automated scraping that degrades edge performance or attempts to circumvent security headers.</p>
+
+    <h2>6. Third-party services and advertisements</h2>
+    <p>{SITE.name} displays third-party advertisements (such as Google AdSense) and links to external repositories and documentation. We do not endorse and are not responsible for the content, products, or practices of third-party advertisers or linked websites.</p>
+
+    <h2>7. Changes and contact</h2>
+    <p>We may revise these Terms of Service at any time by updating this page. Continued use of {SITE.name} constitutes acceptance of the updated terms. Questions can be sent to <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a> or via our <a href="/contact/">Contact page</a>.</p>
+  </article>
+</Base>
+
+<style>
+  .policy-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    padding: 2rem 2.25rem;
+    box-shadow: var(--shadow-md);
+    max-width: 54rem;
+  }
+  .policy-card h1 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .lede {
+    font-size: 1.06rem;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 640px) {
+    .policy-card {
+      padding: 1.35rem;
+    }
+  }
+</style>

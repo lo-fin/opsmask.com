@@ -1,0 +1,30 @@
+{
+  "name": "opsmask",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "purge-cache": "node scripts/purge-cache.mjs",
+    "deploy": "npx wrangler deploy && node scripts/purge-cache.mjs",
+    "deploy:prod": "npx wrangler deploy && node scripts/purge-cache.mjs",
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "astro": "7.3.8",
+    "js-yaml": "4.1.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@types/js-yaml": "4.0.9",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

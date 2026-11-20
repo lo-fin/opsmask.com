@@ -1,0 +1,762 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sample = `2026-10-30T02:14:07.120Z INFO  [ingester] connected to kafka-0.broker:9092
+2026-10-30T02:14:07.448Z WARN  [ingester] consumer lag 14,820 on topic orders.v2
+2026-10-30T02:14:08.003Z ERROR [payment]  upstream timeout after 5000ms (retry 1/3)
+2026-10-30T02:14:08.519Z INFO  [payment]  retry 1 succeeded in 42ms
+2026-10-30T02:14:09.104Z INFO  [gateway]  healthcheck 200 OK`;
+---
+<ToolShell slug="text-line-strip">
+  <div class="block">
+    <div class="grid-3">
+      <div>
+        <label for="opt-start">Strip first N chars (start of line)</label>
+        <div class="stepper-row">
+          <button type="button" class="btn ghost step-btn" id="step-dec" aria-label="Decrease character count by 1">−</button>
+          <input id="opt-start" type="number" min="0" max="1000" value="25" class="code num-in" />
+          <button type="button" class="btn ghost step-btn" id="step-inc" aria-label="Increase character count by 1">+</button>
+          <input id="opt-slider" type="range" min="0" max="60" value="25" class="cut-slider" aria-label="Leading characters to strip slider" />
+        </div>
+      </div>
+
+      <div>
+        <label for="opt-end">Strip last N chars (end of line)</label>
+        <input id="opt-end" type="number" min="0" max="1000" value="0" class="code" />
+      </div>
+
+      <div>
+        <label for="opt-delim">Strip before delimiter (optional)</label>
+        <input id="opt-delim" type="text" class="code" placeholder="e.g. |  or ]  or : " />
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="presets-row" role="group" aria-label="Common prefix length presets">
+        <span class="presets-label">Quick N:</span>
+        <button type="button" class="preset-chip" data-preset="0">0 (Reset)</button>
+        <button type="button" class="preset-chip" data-preset="2">2 chars</button>
+        <button type="button" class="preset-chip" data-preset="4">4 (Indent)</button>
+        <button type="button" class="preset-chip" data-preset="7">7 (Line #)</button>
+        <button type="button" class="preset-chip" data-preset="16">16 (Syslog)</button>
+        <button type="button" class="preset-chip" data-preset="20">20 (Date+Time)</button>
+        <button type="button" class="preset-chip is-active" data-preset="25">25 (ISO-8601Z)</button>
+        <button type="button" class="preset-chip" data-preset="31">31 (K8s log)</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="check"><input type="checkbox" id="opt-trim" /> Trim remaining whitespace</label>
+      <label class="check"><input type="checkbox" id="opt-empty" /> Remove empty lines</label>
+      <label class="check"><input type="checkbox" id="opt-keep-short" /> Keep lines shorter than N untouched</label>
+    </div>
+
+    <div class="ruler-panel" id="ruler-panel">
+      <div class="ruler-head">
+        <span class="ruler-title">Click a character on line 1 to set N:</span>
+        <span id="ruler-badge" class="badge badge-mask">Cutting first 25 chars</span>
+      </div>
+      <div class="ruler-grid" id="ruler-track" role="toolbar" aria-label="Click a character position to strip up to that column"></div>
+    </div>
+
+    <div class="panes">
+      <div class="pane-col">
+        <div class="row">
+          <label for="src">Input</label>
+          <span class="row-actions">
+            <button class="btn ghost" type="button" id="undo-sample" hidden>Undo</button>
+            <button class="btn ghost" type="button" id="load-sample">Load example</button>
+            <button class="btn ghost" type="button" id="clear-src">Clear</button>
+          </span>
+        </div>
+        <textarea id="src" class="code tall" spellcheck="false" placeholder="Paste multi-line logs, numbered code, or prefixed lists…"></textarea>
+        <p id="src-stats" class="muted small stats-line"></p>
+      </div>
+      <div class="pane-col">
+        <div class="row">
+          <label for="dst">Output</label>
+          <span class="row-actions">
+            <button class="btn ghost" type="button" id="use-as-input" title="Replace input with current output to chain another cut">Use as input</button>
+            <button class="btn" type="button" id="copy">Copy output</button>
+          </span>
+        </div>
+        <textarea id="dst" class="code tall" readonly spellcheck="false"></textarea>
+        <p id="dst-stats" class="muted small stats-line"></p>
+      </div>
+    </div>
+
+    <p id="summary" class="summary" role="status"></p>
+
+    <details class="preview-details" id="preview-wrap" open>
+      <summary>
+        <span>Visual Cut Preview (first 12 lines)</span>
+        <span class="muted small">Strikethrough = removed · Normal = kept</span>
+      </summary>
+      <div class="preview-list" id="preview-list"></div>
+    </details>
+
+    <div class="cli-card">
+      <div class="cli-head">
+        <span class="cli-title">Equivalent Terminal One-Liner (Clipboard Pipe)</span>
+        <div class="os-tabs" role="tablist" aria-label="Select operating system for CLI command">
+          <button type="button" class="os-tab is-active" data-os="macos" role="tab" aria-selected="true">macOS</button>
+          <button type="button" class="os-tab" data-os="linux" role="tab" aria-selected="false">Linux</button>
+          <button type="button" class="os-tab" data-os="windows" role="tab" aria-selected="false">Windows (PowerShell)</button>
+        </div>
+      </div>
+      <div class="cli-body">
+        <pre class="out cli-pre"><code id="cli-cmd">pbpaste | cut -c 26- | pbcopy</code></pre>
+        <button type="button" class="btn ghost small-btn" id="copy-cli">Copy command</button>
+      </div>
+      <p class="muted small cli-install" id="cli-install" hidden>
+        Install Linux clipboard tool: <code>sudo apt-get install -y xclip</code> (Debian/Ubuntu) · <code>sudo dnf install -y xclip</code> (Fedora/RHEL) · <code>sudo apk add xclip</code> (Alpine)
+      </p>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>Stripping timestamps, line numbers &amp; log prefixes</h2>
+    <p>When copying logs from Kubernetes (<code>kubectl logs --timestamps</code>), CloudWatch, Grafana Loki, or numbered stack traces, every line starts with a fixed-width timestamp or gutter prefix. Set <strong>Strip first N chars</strong>—or click any character cell in the <strong>line 1 character ruler</strong>—to slice off the exact prefix across all lines at once.</p>
+    <ul>
+      <li><strong>Variable-length pod prefixes:</strong> If lines start with variable pod names like <code>api-7d9c8-x2k | 2026-10-30...</code>, enter <code>| </code> in <strong>Strip before delimiter</strong> first, then use <strong>Strip first N chars</strong> to remove the timestamp that follows.</li>
+      <li><strong>Unicode-safe slicing:</strong> Character counting operates on full Unicode code points rather than raw UTF-16 code units, so multi-byte symbols and emojis are never split in half.</li>
+    </ul>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import {
+    buildLineStripCommands,
+    getTextStats,
+    plural,
+    stripLineCharsDetailed,
+    summarizeLineStrip,
+    type LineStripOptions,
+  } from '../../lib/text-tools';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const src = $<HTMLTextAreaElement>('src');
+  const dst = $<HTMLTextAreaElement>('dst');
+  const optStart = $('opt-start');
+  const optSlider = $('opt-slider');
+  const optEnd = $('opt-end');
+  const optDelim = $('opt-delim');
+  const optTrim = $('opt-trim');
+  const optEmpty = $('opt-empty');
+  const optKeepShort = $('opt-keep-short');
+  const rulerPanel = $<HTMLDivElement>('ruler-panel');
+  const rulerTrack = $<HTMLDivElement>('ruler-track');
+  const rulerBadge = $<HTMLSpanElement>('ruler-badge');
+  const previewWrap = $<HTMLDetailsElement>('preview-wrap');
+  const previewList = $<HTMLDivElement>('preview-list');
+  const summary = $<HTMLParagraphElement>('summary');
+  const undoBtn = $<HTMLButtonElement>('undo-sample');
+  const cliCmdEl = $<HTMLElement>('cli-cmd');
+  const cliInstallEl = $<HTMLParagraphElement>('cli-install');
+
+  let summaryTimer: number | undefined;
+  let beforeSample: string | null = null;
+  let activeOs: 'macos' | 'linux' | 'windows' = 'macos';
+
+  const STORAGE_KEY = 'opsmask:text-line-strip:start';
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved !== null) {
+      const parsed = Math.max(0, Math.min(1000, Number(saved) || 0));
+      optStart.value = String(parsed);
+      optSlider.value = String(Math.min(60, parsed));
+    }
+  } catch {}
+
+  function setStartCount(val: number) {
+    const clamped = Math.max(0, Math.min(1000, Math.floor(val || 0)));
+    optStart.value = String(clamped);
+    optSlider.value = String(Math.min(60, clamped));
+    try {
+      localStorage.setItem(STORAGE_KEY, String(clamped));
+    } catch {}
+    run();
+  }
+
+  function syncPresetChips(n: number) {
+    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((btn) => {
+      btn.classList.toggle('is-active', Number(btn.dataset.preset) === n);
+    });
+  }
+
+  function renderRuler(firstLine: string, stripStart: number, delim: string) {
+    if (!firstLine) {
+      rulerPanel.hidden = true;
+      return;
+    }
+    rulerPanel.hidden = false;
+
+    let working = firstLine;
+    if (delim) {
+      const pos = working.indexOf(delim);
+      if (pos !== -1) {
+        working = working.slice(pos + delim.length);
+      }
+    }
+
+    const chars = Array.from(working).slice(0, 60);
+    rulerBadge.textContent = stripStart > 0 ? `Cutting first ${plural(stripStart, 'char')}` : 'No leading chars cut (0)';
+
+    if (!chars.length) {
+      rulerTrack.innerHTML = `<span class="muted small">First line is empty after delimiter cut.</span>`;
+      return;
+    }
+
+    rulerTrack.innerHTML = chars
+      .map((ch, i) => {
+        const col = i + 1;
+        const isCut = col <= stripStart;
+        const isBoundary = col === stripStart;
+        const displayChar = ch === ' ' ? '␣' : ch === '\t' ? '⇥' : esc(ch);
+        const isSpace = ch === ' ' || ch === '\t';
+        return `<button type="button" class="ruler-cell${isCut ? ' is-cut' : ''}${isBoundary ? ' is-boundary' : ''}${isSpace ? ' is-ws' : ''}" data-col="${col}" title="Click to strip first ${col} character${col === 1 ? '' : 's'}" aria-label="Strip first ${col} characters">
+          <span class="r-ch">${displayChar}</span>
+          <span class="r-idx">${col}</span>
+        </button>`;
+      })
+      .join('');
+  }
+
+  function renderPreview(preview: ReturnType<typeof stripLineCharsDetailed>['preview']) {
+    if (!preview.length) {
+      previewWrap.hidden = true;
+      return;
+    }
+    previewWrap.hidden = false;
+    previewList.innerHTML = preview
+      .map((item) => {
+        const pre = item.cutPrefix ? `<del class="cut-seg" title="Stripped prefix">${esc(item.cutPrefix)}</del>` : '';
+        const mid = item.kept ? `<span class="kept-seg">${esc(item.kept)}</span>` : '<span class="empty-seg">(empty)</span>';
+        const suf = item.cutSuffix ? `<del class="cut-seg" title="Stripped suffix">${esc(item.cutSuffix)}</del>` : '';
+        return `<div class="preview-row"><span class="preview-ln">${item.lineNumber}</span><span class="preview-text">${pre}${mid}${suf}</span></div>`;
+      })
+      .join('');
+  }
+
+  function renderCli(stripStart: number, stripEnd: number) {
+    const cmds = buildLineStripCommands(stripStart, stripEnd);
+    cliCmdEl.textContent = cmds[activeOs];
+    cliInstallEl.hidden = activeOs !== 'linux';
+  }
+
+  function fmtInputStats(text: string) {
+    if (!text) return 'Paste multi-line text on the left or click Load example.';
+    const s = getTextStats(text);
+    return `${plural(s.lines, 'line')} (${s.nonEmptyLines.toLocaleString('en-US')} non-empty) · ${plural(s.chars, 'char')}`;
+  }
+
+  function hideUndo() {
+    beforeSample = null;
+    undoBtn.hidden = true;
+  }
+
+  function run() {
+    const stripStart = Math.max(0, Math.floor(Number(optStart.value) || 0));
+    const stripEnd = Math.max(0, Math.floor(Number(optEnd.value) || 0));
+    const opts: LineStripOptions = {
+      stripStart,
+      stripEnd,
+      stripBeforeDelimiter: optDelim.value,
+      trimRemaining: optTrim.checked,
+      removeEmpty: optEmpty.checked,
+      keepShortLines: optKeepShort.checked,
+    };
+
+    syncPresetChips(stripStart);
+    const result = stripLineCharsDetailed(src.value, opts);
+    dst.value = result.text;
+
+    $('src-stats').textContent = fmtInputStats(src.value);
+    $('dst-stats').textContent = src.value
+      ? `${plural(result.outputLines, 'line')} · ${plural(result.text.length, 'char')} (${plural(result.totalCharsRemoved, 'char')} stripped)`
+      : 'Stripped output appears here immediately.';
+
+    renderRuler(result.firstNonEmptyLine, stripStart, optDelim.value);
+    renderPreview(result.preview);
+    renderCli(stripStart, stripEnd);
+
+    clearTimeout(summaryTimer);
+    summaryTimer = window.setTimeout(() => {
+      summary.textContent = summarizeLineStrip(result);
+    }, 300);
+  }
+
+  optStart.addEventListener('input', () => {
+    const v = Math.max(0, Math.min(1000, Math.floor(Number(optStart.value) || 0)));
+    optSlider.value = String(Math.min(60, v));
+    try {
+      localStorage.setItem(STORAGE_KEY, String(v));
+    } catch {}
+    run();
+  });
+
+  optSlider.addEventListener('input', () => {
+    setStartCount(Number(optSlider.value));
+  });
+
+  $('step-dec').addEventListener('click', () => {
+    setStartCount((Number(optStart.value) || 0) - 1);
+  });
+
+  $('step-inc').addEventListener('click', () => {
+    setStartCount((Number(optStart.value) || 0) + 1);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setStartCount(Number(btn.dataset.preset));
+    });
+  });
+
+  rulerTrack.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-col]');
+    if (!btn) return;
+    const col = Number(btn.dataset.col);
+    const current = Number(optStart.value) || 0;
+    setStartCount(col === current ? 0 : col);
+  });
+
+  [optEnd, optDelim, optTrim, optEmpty, optKeepShort, src].forEach((el) => {
+    el.addEventListener('input', run);
+    el.addEventListener('change', run);
+  });
+
+  const sampleText: string = JSON.parse($('sample').textContent!);
+  $('load-sample').addEventListener('click', () => {
+    if (src.value.trim() && src.value !== sampleText) {
+      beforeSample = src.value;
+      undoBtn.hidden = false;
+    }
+    src.value = sampleText;
+    run();
+  });
+
+  undoBtn.addEventListener('click', () => {
+    if (beforeSample !== null) src.value = beforeSample;
+    hideUndo();
+    run();
+    src.focus();
+  });
+
+  $('clear-src').addEventListener('click', () => {
+    if (src.value.trim()) {
+      beforeSample = src.value;
+      undoBtn.hidden = false;
+    }
+    src.value = '';
+    run();
+    src.focus();
+  });
+
+  $('use-as-input').addEventListener('click', () => {
+    if (!dst.value) return;
+    beforeSample = src.value;
+    undoBtn.hidden = false;
+    src.value = dst.value;
+    run();
+  });
+
+  src.addEventListener('input', hideUndo);
+  $('copy').addEventListener('click', () => copyText($('copy'), dst.value, dst));
+  $('copy-cli').addEventListener('click', () => copyText($('copy-cli'), cliCmdEl.textContent ?? '', cliCmdEl));
+
+  document.querySelectorAll<HTMLButtonElement>('[data-os]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeOs = btn.dataset.os as 'macos' | 'linux' | 'windows';
+      document.querySelectorAll<HTMLButtonElement>('[data-os]').forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-selected', String(active));
+      });
+      renderCli(Math.max(0, Number(optStart.value) || 0), Math.max(0, Number(optEnd.value) || 0));
+    });
+  });
+
+  src.value = sampleText;
+  run();
+</script>
+
+<style>
+  .block {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.75fr) minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: end;
+  }
+
+  .stepper-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .step-btn {
+    padding: 0.45rem 0.7rem;
+    font-family: var(--font-code);
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  input[type='number'].num-in {
+    width: 4.8rem;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 700;
+    padding: 0.5rem 0.4rem;
+  }
+
+  .cut-slider {
+    flex: 1;
+    min-width: 4rem;
+    width: auto;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 1.1rem;
+    align-items: center;
+  }
+
+  .presets-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .presets-label {
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-right: 0.2rem;
+  }
+
+  .preset-chip {
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg-subtle);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+  }
+
+  .preset-chip:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+
+  .preset-chip.is-active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--ok);
+  }
+
+  /* Interactive Character Ruler */
+  .ruler-panel {
+    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.75rem 0.9rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .ruler-panel[hidden] {
+    display: none;
+  }
+
+  .ruler-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .ruler-title {
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+
+  .ruler-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+
+  :global(.ruler-cell) {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    padding: 0.2rem 0.1rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-code);
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+
+  :global(.ruler-cell:hover) {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+
+  :global(.ruler-cell.is-cut) {
+    background: color-mix(in srgb, var(--err) 16%, var(--surface));
+    border-color: color-mix(in srgb, var(--err) 45%, var(--line));
+    color: var(--err);
+  }
+
+  :global(.ruler-cell.is-cut .r-ch) {
+    text-decoration: line-through;
+  }
+
+  :global(.ruler-cell.is-boundary) {
+    border-right: 2px solid var(--mask);
+  }
+
+  :global(.ruler-cell.is-ws .r-ch) {
+    opacity: 0.55;
+  }
+
+  :global(.r-ch) {
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  :global(.r-idx) {
+    font-size: 0.6rem;
+    color: var(--ink-muted);
+    line-height: 1;
+    margin-top: 2px;
+  }
+
+  .panes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    min-width: 0;
+  }
+
+  .pane-col {
+    min-width: 0;
+  }
+
+  .tall { min-height: 16rem; }
+  .row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; margin-bottom: 0.35rem; gap: 0.4rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.88rem; }
+  .row-actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
+
+  .summary {
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--bg-subtle);
+    font-family: var(--font-code);
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  .summary:empty { display: none; }
+
+  /* Live Cut Diff Preview */
+  .preview-details {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--bg-subtle);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .preview-details[hidden] {
+    display: none;
+  }
+
+  .preview-details summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    cursor: pointer;
+    font-family: var(--font-code);
+    font-size: 0.83rem;
+    font-weight: 600;
+    background: var(--surface-2);
+  }
+
+  .preview-list {
+    padding: 0.65rem 0.9rem;
+    max-height: 14rem;
+    overflow: auto;
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  .preview-list :global(.preview-row) {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.1rem 0;
+  }
+
+  .preview-list :global(.preview-ln) {
+    text-align: right;
+    color: var(--ink-muted);
+    user-select: none;
+  }
+
+  .preview-list :global(.preview-text) {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .preview-list :global(.cut-seg) {
+    background: color-mix(in srgb, var(--err) 20%, transparent);
+    color: var(--err);
+    text-decoration: line-through;
+    border-radius: 3px;
+    padding-inline: 2px;
+  }
+
+  .preview-list :global(.kept-seg) {
+    color: var(--ink);
+  }
+
+  .preview-list :global(.empty-seg) {
+    color: var(--ink-muted);
+    font-style: italic;
+  }
+
+  /* Cross-OS CLI Card */
+  .cli-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--bg-subtle);
+    padding: 0.8rem 0.95rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .cli-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .cli-title {
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .os-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .os-tab {
+    font-family: var(--font-code);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.22rem 0.55rem;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+
+  .os-tab.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  .cli-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .cli-pre {
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+  }
+
+  .small-btn {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.84rem;
+    white-space: nowrap;
+  }
+
+  .cli-install {
+    margin: 0;
+  }
+
+  .small { font-size: 0.85rem; }
+  .stats-line { margin: 0.35rem 0 0; }
+
+  @media (max-width: 860px) {
+    .grid-3 {
+      grid-template-columns: 1fr;
+    }
+    .panes {
+      grid-template-columns: 1fr;
+    }
+    .cli-body {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

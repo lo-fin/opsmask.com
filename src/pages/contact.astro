@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE, repoIssueUrl } from '../config';
+---
+<Base title="Contact & Support" description={`Contact the ${SITE.name} team for bug reports, tool requests, security disclosures, or general inquiries.`}>
+  <article class="policy-card prose">
+    <span class="badge badge-accent">Get in Touch</span>
+    <h1>Contact {SITE.name}</h1>
+    <p class="lede">Have a question, found a bug in a Kubernetes validator, want to suggest a new DevOps tool, or need to reach us regarding privacy or partnerships? Choose the fastest channel below.</p>
+
+    <div class="contact-grid">
+      <section class="contact-box">
+        <h2>Direct Email</h2>
+        <p>For general inquiries, privacy requests, content corrections, or sponsorship questions:</p>
+        <p class="contact-action"><a class="btn" href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a></p>
+        <p class="muted small">We typically respond within 2–3 business days.</p>
+      </section>
+
+      <section class="contact-box">
+        <h2>GitHub Issues &amp; Contributions</h2>
+        <p>For reproducible bugs, edge cases in YAML/JSON parsing, new tool requests, or prompt submissions, GitHub Issues let the community track fixes transparently:</p>
+        <ul>
+          <li><a href={repoIssueUrl('bug_report.yml')} rel="noopener">Report a bug</a></li>
+          <li><a href={repoIssueUrl('tool_request.yml')} rel="noopener">Request a new tool</a></li>
+          <li><a href={repoIssueUrl('prompt_submission.yml')} rel="noopener">Submit an AI prompt template</a></li>
+        </ul>
+      </section>
+    </div>
+
+    <h2>Security disclosures</h2>
+    <p>If you discover a security vulnerability—such as a Cross-Site Scripting (XSS) issue, a Content Security Policy bypass, or a secret-redaction flaw—please review our <a href={`${SITE.repo}/blob/${SITE.branch}/SECURITY.md`} rel="noopener">Security Policy</a> or email <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a> with <code>[SECURITY]</code> in the subject line before opening a public issue.</p>
+
+    <h2>Before reporting a tool bug</h2>
+    <p>Never include real production passwords, bearer tokens, or private keys in a bug report or email. Replace sensitive values with synthetic placeholders (or run them through our <a href="/tools/k8s-redactor/">Kubernetes Redactor</a> first) and include your browser version and expected vs. actual output.</p>
+  </article>
+</Base>
+
+<style>
+  .policy-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    padding: 2rem 2.25rem;
+    box-shadow: var(--shadow-md);
+    max-width: 54rem;
+  }
+  .policy-card h1 {
+    margin-top: 0.5rem;
+  }
+  .lede {
+    font-size: 1.06rem;
+    color: var(--ink-soft);
+  }
+  .contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+    margin: 1.5rem 0 2rem;
+  }
+  .contact-box {
+    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 1.25rem 1.35rem;
+  }
+  .contact-box h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+  }
+  .contact-action {
+    margin: 1rem 0 0.75rem;
+  }
+  .small {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+  }
+  @media (max-width: 720px) {
+    .contact-grid {
+      grid-template-columns: 1fr;
+    }
+    .policy-card {
+      padding: 1.35rem;
+    }
+  }
+</style>

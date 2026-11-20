@@ -1,0 +1,109 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+import { EXAMPLES } from '../../lib/k8s-neat.samples';
+---
+<ToolShell slug="k8s-neat">
+  <div class="input">
+    <div class="row">
+      <label for="src">Output of <code>kubectl get … -o yaml</code> (or JSON)</label>
+      <span class="examples">
+        <select id="example" aria-label="Example">
+          {Object.entries(EXAMPLES).map(([k, e]) => <option value={k}>{e.label}</option>)}
+        </select>
+        <button class="btn ghost" type="button" id="load-sample">Load example</button>
+      </span>
+    </div>
+    <textarea id="src" class="code tall" spellcheck="false" placeholder="kubectl get deploy,svc -n prod -o yaml"></textarea>
+  </div>
+  <fieldset class="opts">
+    <legend>Remove</legend>
+    <label class="check"><input type="checkbox" checked disabled /> Status and server-managed metadata</label>
+    <label class="check"><input type="checkbox" id="o-defaults" checked /> Fields set to their default value</label>
+    <label class="check"><input type="checkbox" id="o-assigned" checked /> Values the cluster assigned (clusterIP, nodePort, nodeName, PVC volumeName)</label>
+    <label class="check"><input type="checkbox" id="o-helm" /> Helm release labels and annotations</label>
+  </fieldset>
+  <p id="err" class="status-err" aria-live="polite"></p>
+  <ul id="notes" class="notes"></ul>
+  <div class="output">
+    <div class="row">
+      <span id="count" class="muted small" aria-live="polite"></span>
+      <span class="actions">
+        <a id="check-link" class="btn ghost small" href="/tools/k8s-manifest-checker/">Check in manifest checker</a>
+        <button class="btn ghost small" type="button" id="copy">Copy</button>
+      </span>
+    </div>
+    <pre id="out" class="out"></pre>
+    <details id="removed-wrap" hidden>
+      <summary>What was removed</summary>
+      <ul id="removed" class="removed"></ul>
+    </details>
+  </div>
+  <script type="application/json" id="examples" set:html={JSON.stringify(Object.fromEntries(Object.entries(EXAMPLES).map(([k, e]) => [k, e.text]))).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>What gets removed</h2>
+    <ul>
+      <li><strong>Always:</strong> <code>status</code>, <code>uid</code>, <code>resourceVersion</code>, <code>generation</code>, <code>creationTimestamp</code>, <code>managedFields</code>, <code>ownerReferences</code>, the <code>last-applied-configuration</code> annotation, and labels the controllers add (<code>pod-template-hash</code>, <code>controller-uid</code>, <code>job-name</code>…).</li>
+      <li><strong>Defaults:</strong> only when the value is exactly the default, such as <code>dnsPolicy: ClusterFirst</code>, <code>terminationGracePeriodSeconds: 30</code>, a 25%/25% rolling update or probe timings of 1s/10s/1/3. A value you changed is kept.</li>
+      <li><strong>Assigned values:</strong> a Service’s <code>clusterIP</code> and <code>nodePort</code>, a pod’s <code>nodeName</code> and a PVC’s <code>volumeName</code>. Keep them only if you re-apply to the same cluster and need the same addresses.</li>
+    </ul>
+    <p>Export the controller, not its pods: a Deployment, StatefulSet or Job manifest recreates the pods.</p>
+    <pre><code set:text={`kubectl get deploy,svc,ingress,configmap -n prod -o yaml > live.yaml`} /></pre>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { neat } from '../../lib/k8s-neat';
+  import { copyText } from '../../scripts/copy';
+  const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+  const src = $<HTMLTextAreaElement>('src');
+  const examples: Record<string, string> = JSON.parse($('examples').textContent!);
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  const checked = (id: string) => $<HTMLInputElement>(id).checked;
+  let output = '';
+
+  function run() {
+    $('err').textContent = ''; $('notes').innerHTML = ''; $('count').textContent = '';
+    $('removed-wrap').hidden = true; output = ''; $('out').textContent = '';
+    if (!src.value.trim()) return;
+    try {
+      const r = neat(yaml.loadAll(src.value), { defaults: checked('o-defaults'), assigned: checked('o-assigned'), helm: checked('o-helm') });
+      output = r.docs.map((d) => yaml.dump(d, { lineWidth: -1, noRefs: true })).join('---\n');
+      $('out').textContent = output;
+      const before = src.value.trim().split('\n').length, after = output.trim().split('\n').length;
+      $('count').textContent = `${r.removed.length} field${r.removed.length === 1 ? '' : 's'} removed · ${before} → ${after} lines`;
+      $('notes').innerHTML = r.notes.map((n) => `<li>${esc(n)}</li>`).join('');
+      $('removed').innerHTML = r.removed.map((x) => `<li><code>${esc(x)}</code></li>`).join('');
+      $('removed-wrap').hidden = !r.removed.length;
+      // The hash stays in the browser; the manifest checker reads it on load.
+      $<HTMLAnchorElement>('check-link').href = `/tools/k8s-manifest-checker/#yaml=${encodeURIComponent(output)}`;
+    } catch (e) {
+      $('err').textContent = (e as Error).message.split('\n')[0];
+    }
+  }
+
+  src.addEventListener('input', run);
+  document.querySelectorAll('.opts input').forEach((el) => el.addEventListener('change', run));
+  $('load-sample').addEventListener('click', () => { src.value = examples[$<HTMLSelectElement>('example').value]; run(); });
+  $('copy').addEventListener('click', () => copyText($('copy'), output, $('out')));
+</script>
+
+<style>
+  .tall { min-height: 14rem; }
+  .input, .output { min-width: 0; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 0.5rem 1rem; margin-bottom: 0.35rem; flex-wrap: wrap; }
+  .row label { margin: 0; }
+  .examples, .actions { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; max-width: 100%; }
+  .examples select { width: auto; min-width: 0; flex: 1 1 auto; padding-block: 0.3rem; font-size: 0.9rem; }
+  .examples .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; white-space: nowrap; }
+  .opts { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 0.6rem 1rem; margin: 0; display: grid; gap: 0.3rem; }
+  .opts legend { font-weight: 700; padding-inline: 0.3rem; }
+  .small { font-size: 0.85rem; }
+  #err:empty, .notes:empty { display: none; }
+  .notes { margin: 0; padding-left: 1.1rem; color: var(--warn); }
+  #out { max-height: 36rem; overflow: auto; white-space: pre; word-break: normal; min-height: 4rem; }
+  details { margin-top: 0.5rem; font-size: 0.9rem; }
+  .removed { max-height: 16rem; overflow: auto; padding-left: 1.1rem; margin: 0.4rem 0 0; }
+  .removed code { font-size: 0.8rem; }
+</style>

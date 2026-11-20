@@ -1,0 +1,1408 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="env-suggest">
+  <div class="env-workspace">
+    <!-- Top Compact Context & Security Bar -->
+    <header class="context-bar" aria-label="Environments and security settings">
+      <div class="env-strip-wrap">
+        <span class="strip-label">Target env / namespace:</span>
+        <ul id="env-list" class="env-strip" role="list"></ul>
+
+        <form id="add-form" class="inline-add-form">
+          <label for="new-env-name" class="sr-only">New environment or namespace name</label>
+          <input id="new-env-name" type="text" class="code" placeholder="+ Add env (e.g. brand)…" required />
+          <button class="btn ghost tiny-btn" type="submit">Add</button>
+        </form>
+      </div>
+
+      <div class="bar-controls">
+        <label class="check compact-check" title="Mask Secret and password values on screen">
+          <input type="checkbox" id="mask-secrets" checked />
+          🔒 Mask secrets
+        </label>
+
+        <label class="inline-select-label" for="storage-mode" title="How sample data is persisted in this browser">
+          <span class="sr-only">Storage mode</span>
+          <select id="storage-mode" class="small-select">
+            <option value="all">Storage: Save all</option>
+            <option value="scrub">Storage: Scrub secrets (&lt;secret&gt;)</option>
+            <option value="session">Storage: Session only (RAM)</option>
+          </select>
+        </label>
+
+        <button class="btn ghost tiny-btn style-demo-btn" type="button" id="load-demo" title="Load sample Kubernetes dev & prod configs">
+          ⚡ Example
+        </button>
+        <button class="btn ghost tiny-btn danger-btn" type="button" id="reset-all" title="Clear all saved environments and restore defaults">
+          Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- 1. Collapsible Sample Data Panel -->
+    <section class="panel sample-panel" aria-labelledby="sample-heading">
+      <div class="row">
+        <div class="sample-title-group">
+          <button type="button" class="collapse-toggle" id="toggle-sample-editor" aria-expanded="true">
+            <span id="sample-chevron" class="chevron" aria-hidden="true">▾</span>
+            <h2 id="sample-heading" class="panel-title">1. Sample data for <code id="current-env-label"></code></h2>
+          </button>
+          <span id="sample-status" class="muted small-status" aria-live="polite"></span>
+          <button type="button" class="btn ghost tiny-btn" id="adopt-ns-btn" hidden></button>
+        </div>
+        <div class="row-actions">
+          <span id="unsaved-badge" class="badge badge-warn" hidden>unsaved</span>
+          <button class="btn ghost small-btn" type="button" id="toggle-k8s-cmd" aria-expanded="false" title="Show OS-specific command and CLI options">
+            ☸ Fetch from K8s
+          </button>
+          <button class="btn small-btn" type="button" id="save-sample">Save sample</button>
+        </div>
+      </div>
+
+      <!-- Always-visible single-line OS-matched command bar -->
+      <div class="quick-cmd-bar">
+        <span class="quick-cmd-label">Pull from K8s (<span id="quick-os-label">macOS</span>):</span>
+        <code id="quick-cmd-code" class="quick-cmd-code">kubectl get configmap,secret -n prod -o yaml | pbcopy</code>
+        <button type="button" class="btn ghost tiny-btn" id="copy-quick-cmd">Copy command</button>
+      </div>
+
+      <div id="k8s-fetch-box" class="k8s-box" hidden>
+        <div class="k8s-box-head">
+          <span>Run one of these commands on your cluster to copy all <code>ConfigMap</code> &amp; <code>Secret</code> values, then paste into Sample data:</span>
+          <div class="k8s-controls">
+            <label class="ns-inline" for="k8s-ns">
+              Namespace
+              <input id="k8s-ns" type="text" class="code ns-input" value="prod" />
+            </label>
+            <label class="ns-inline" for="k8s-os">
+              OS
+              <select id="k8s-os" class="small-select">
+                <option value="macos">macOS (pbcopy)</option>
+                <option value="linux">Linux (xclip)</option>
+                <option value="windows">Windows (PowerShell)</option>
+              </select>
+            </label>
+            <label class="check pipe-check">
+              <input type="checkbox" id="k8s-pipe-clip" checked />
+              Pipe to clipboard
+            </label>
+          </div>
+        </div>
+        <ul id="k8s-cmd-list" class="k8s-cmd-list"></ul>
+        <div class="k8s-install-box">
+          <strong>Command not found? Install required CLI tools:</strong>
+          <ul id="k8s-install-list" class="k8s-install-list"></ul>
+        </div>
+      </div>
+
+      <div id="sample-body" class="sample-editor-wrap">
+        <textarea
+          id="sample-in"
+          class="code sample-textarea"
+          spellcheck="false"
+          placeholder="Paste `kubectl get configmap,secret -o yaml` output, .env, JSON (appsettings.json), or YAML sample for the selected environment…"
+        ></textarea>
+        <p id="sample-mask-hint" class="muted tiny-hint" hidden>
+          Blurred while unfocused because Secrets were detected. Click to view/edit or uncheck “🔒 Mask secrets”.
+        </p>
+      </div>
+      <p id="sample-err" class="status-err" aria-live="polite"></p>
+    </section>
+
+    <!-- 2. Main Target Migration & Results Panel (Full Width) -->
+    <section class="panel" aria-labelledby="new-heading">
+      <div class="row">
+        <div>
+          <h2 id="new-heading" class="panel-title">2. Suggest values for <code id="target-env-label"></code></h2>
+          <p class="muted small-status">Paste the keys/values, ConfigMap/Secret YAML, or .env to migrate to the selected target environment.</p>
+        </div>
+        <div class="row-actions">
+          <button class="btn small-btn" type="button" id="analyze-btn">Analyze</button>
+        </div>
+      </div>
+      <textarea
+        id="target-in"
+        class="code target-textarea"
+        spellcheck="false"
+        placeholder="Paste .env, ConfigMap/Secret YAML, docker-compose list, or JSON to fill values for the selected environment…"
+      ></textarea>
+      <p id="target-err" class="status-err" aria-live="polite"></p>
+
+      <div id="results-wrap" class="results" hidden>
+        <div class="toolbar">
+          <div id="summary-pills" class="summary-pills" role="group" aria-label="Filter by suggestion source"></div>
+          <div class="export-bar">
+            <label for="export-fmt" class="sr-only">Export format</label>
+            <select id="export-fmt" class="small-select">
+              <option value="original">Export: Match input format</option>
+              <option value="dotenv">Export: .env (KEY=VALUE)</option>
+              <option value="k8s-cm">Export: K8s ConfigMap YAML</option>
+              <option value="k8s-secret-string">Export: K8s Secret (stringData)</option>
+              <option value="k8s-secret-b64">Export: K8s Secret (Base64 data)</option>
+            </select>
+            <button class="btn small-btn" type="button" id="copy-out">Copy output</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="suggest-table" class="suggest-table">
+            <thead>
+              <tr>
+                <th class="col-key">Key</th>
+                <th class="col-in">Input value</th>
+                <th class="col-val">Suggested value</th>
+                <th class="col-src">Source</th>
+              </tr>
+            </thead>
+            <tbody id="suggest-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div slot="notes" class="prose">
+    <h2>Pull all ConfigMaps &amp; Secrets from Kubernetes into Sample Data</h2>
+    <p>You do not need to decode Base64 values or merge files manually. Click <strong>☸ Fetch from K8s</strong> inside the tool above to auto-detect your OS and namespace, or copy the single command for your OS below and paste the result into <strong>Sample data</strong>:</p>
+    <ul>
+      <li><strong>macOS (pipes directly to clipboard):</strong>
+        <pre><code>kubectl get configmap,secret -n brand -o yaml | pbcopy</code></pre>
+      </li>
+      <li><strong>Linux (X11 with <code>xclip</code>, or replace with <code>wl-copy</code> on Wayland):</strong>
+        <pre><code>kubectl get configmap,secret -n brand -o yaml | xclip -selection clipboard</code></pre>
+      </li>
+      <li><strong>Windows (PowerShell):</strong>
+        <pre><code>kubectl get configmap,secret -n brand -o yaml | Set-Clipboard</code></pre>
+      </li>
+    </ul>
+    <p>If <code>kubectl</code>, <code>jq</code>, or a clipboard helper is not installed yet:</p>
+    <ul>
+      <li><strong>macOS (Homebrew):</strong>
+        <pre><code>brew install kubectl jq</code></pre>
+      </li>
+      <li><strong>Debian / Ubuntu:</strong>
+        <pre><code>sudo apt-get update &amp;&amp; sudo apt-get install -y kubectl jq xclip</code></pre>
+      </li>
+      <li><strong>RHEL / Fedora:</strong>
+        <pre><code>sudo dnf install -y kubernetes-client jq xclip</code></pre>
+      </li>
+      <li><strong>Alpine:</strong>
+        <pre><code>apk add kubectl jq xclip</code></pre>
+      </li>
+      <li><strong>Windows (winget):</strong>
+        <pre><code>winget install -e --id Kubernetes.kubectl &amp;&amp; winget install -e --id jqlang.jq</code></pre>
+      </li>
+    </ul>
+    <p>When you paste a Kubernetes YAML output, this tool automatically:</p>
+    <ul>
+      <li>Reads <code>kind: List</code>, <code>ConfigMap.data</code>, <code>Secret.data</code> (auto-decoded from Base64), and <code>Secret.stringData</code>.</li>
+      <li>Detects <code>metadata.namespace</code> from the pasted manifest and offers a one-click button to rename or switch the current environment tab.</li>
+      <li>Skips noisy cluster/system objects such as <code>kubernetes.io/service-account-token</code>, <code>helm.sh/release.v1</code>, <code>kubernetes.io/tls</code>, and <code>kube-root-ca.crt</code>.</li>
+      <li>Flags keys coming from a <code>Secret</code> (or keys matching sensitive patterns like <code>PASSWORD</code>, <code>SECRET</code>, <code>TOKEN</code>, <code>API_KEY</code>, <code>CONNSTR</code>) so they are masked on screen by default.</li>
+    </ul>
+
+    <h2>How suggestions are ranked (5 tiers)</h2>
+    <ol>
+      <li><strong>Exact key match:</strong> normalizes key names (lowercased and stripped of <code>- _ . :</code>, so <code>DB_HOST</code>, <code>db.host</code>, and <code>Db__Host</code> match).</li>
+      <li><strong>Fuzzy key + value shape match:</strong> splits keys into words across <code>_ . - : __</code> and <code>camelCase</code>, canonicalizes common synonyms (<code>db|database</code>, <code>host|hostname|server|addr</code>, <code>url|uri|dsn|endpoint|connection</code>, <code>pass|password|secret</code>…), and combines <strong>Weighted Dice (IDF)</strong> key similarity (70%) with <strong>value shape compatibility</strong> (30%: URL scheme, hostname, IP, host:port, connection string, number/port, boolean). Assigned 1-to-1 with a dropdown of alternative candidates when available.</li>
+      <li><strong>Token substitution:</strong> detects which saved environment overlaps most with your input, learns token-level replacement rules across shared keys (e.g. <code>dev-db.internal</code> → <code>prod-db.internal</code> learns <code>dev→prod</code>, plus environment name rules), and rewrites tokens in new keys.</li>
+      <li><strong>Unchanged:</strong> if a key has the exact same value across your saved environments (e.g. <code>LOG_FORMAT=json</code>), keeps it as-is.</li>
+      <li><strong>Needs review:</strong> remaining keys keep their input value and are highlighted in amber so you can verify them before copying.</li>
+    </ol>
+
+    <h2>Secret masking &amp; local storage privacy</h2>
+    <ul>
+      <li><strong>Mask sensitive values (enabled by default):</strong> Sensitive keys are masked as <code>••••••••</code> in both the <em>Input value</em> and <em>Suggested value</em> columns, with a per-row <strong>Show / Hide</strong> toggle. The <em>Sample data</em> box also blurs automatically when unfocused if Secrets are present.</li>
+      <li><strong>3 storage modes:</strong> choose between <em>Save all (localStorage)</em>, <em>Scrub secrets on save</em> (replaces sensitive values with <code>&lt;secret&gt;</code> before writing to disk), or <em>Session only (RAM)</em> so nothing touches browser storage.</li>
+    </ul>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import {
+    buildKubectlFetchCommands,
+    parseEnvInput,
+    scrubSecretsInText,
+    serializeAs,
+    suggest,
+    type EnvSample,
+    type ExportFormat,
+    type FetchOS,
+    type Source,
+    type Suggestion,
+  } from '../../lib/env-suggest';
+
+  const STORAGE_KEY = 'opsmask:env-suggest';
+  type StorageMode = 'all' | 'scrub' | 'session';
+
+  type StoredState = {
+    envs: EnvSample[];
+    selected: string;
+    draft: string;
+    storageMode?: StorageMode;
+    maskSecrets?: boolean;
+    sampleCollapsed?: boolean;
+  };
+
+  const DEMO_PROD_YAML = `apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: billing-config
+      namespace: prod
+    data:
+      DB_HOST: prod-pg.internal.net
+      REDIS_URL: redis://prod-cache.internal.net:6379
+      LOG_FORMAT: json
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: billing-secrets
+      namespace: prod
+    type: Opaque
+    data:
+      DB_PASSWORD: cHJvZC1zdXBlci1zZWNyZXQtcGFzcw==
+      STRIPE_API_KEY: c2tfbGl2ZV9wcm9kXzk4NzY1NDMyMQ==`;
+
+  const DEMO_DEV_ENV = `DB_HOST=dev-pg.internal.net
+REDIS_URL=redis://dev-cache.internal.net:6379
+LOG_FORMAT=json
+DB_PASSWORD=dev-local-pass
+STRIPE_API_KEY=sk_test_dev_123456`;
+
+  const DEMO_TARGET_INPUT = `# Config from a new service being migrated to prod:
+host=dev-pg.internal.net
+redis_connection_url=redis://dev-cache.internal.net:6379
+ORDER_QUEUE_URL=https://dev-queue.internal.net/orders
+LOG_FORMAT=json
+DB_PASSWORD=dev-local-pass
+JWT_SIGNING_SECRET=changeme-in-prod`;
+
+  const DEFAULT_ENVS: EnvSample[] = [
+    { id: 'dev', name: 'dev', text: DEMO_DEV_ENV },
+    { id: 'prod', name: 'prod', text: DEMO_PROD_YAML },
+  ];
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  function loadState(): StoredState {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.envs) && parsed.envs.length > 0) {
+          const selected = parsed.envs.some((e: EnvSample) => e.id === parsed.selected)
+            ? parsed.selected
+            : parsed.envs[0].id;
+          return {
+            envs: parsed.envs,
+            selected,
+            draft: typeof parsed.draft === 'string' ? parsed.draft : DEMO_TARGET_INPUT,
+            storageMode: parsed.storageMode ?? 'all',
+            maskSecrets: parsed.maskSecrets ?? true,
+            sampleCollapsed: Boolean(parsed.sampleCollapsed),
+          };
+        }
+      }
+    } catch {}
+    return {
+      envs: DEFAULT_ENVS.map((e) => ({ ...e })),
+      selected: 'prod',
+      draft: DEMO_TARGET_INPUT,
+      storageMode: 'all',
+      maskSecrets: true,
+      sampleCollapsed: false,
+    };
+  }
+
+  let state = loadState();
+  let currentFormat = '.env';
+  let currentOriginal = '';
+  let currentSuggestions: Suggestion[] = [];
+  let activeFilter: Source | 'all' = 'all';
+  let revealedRows = new Set<number>();
+
+  function saveState() {
+    const mode = state.storageMode ?? 'all';
+    if (mode === 'session') {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      return;
+    }
+    try {
+      const toStore: StoredState =
+        mode === 'scrub'
+          ? {
+              ...state,
+              envs: state.envs.map((e) => ({ ...e, text: scrubSecretsInText(e.text) })),
+              draft: scrubSecretsInText(state.draft),
+            }
+          : state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+    } catch {}
+  }
+
+  function currentEnv(): EnvSample | undefined {
+    return state.envs.find((e) => e.id === state.selected);
+  }
+
+  function countEnvKeys(text: string): number {
+    try {
+      return parseEnvInput(text).pairs.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  const envListEl = $<HTMLUListElement>('env-list');
+  const addFormEl = $<HTMLFormElement>('add-form');
+  const newEnvNameEl = $<HTMLInputElement>('new-env-name');
+  const storageModeEl = $<HTMLSelectElement>('storage-mode');
+  const maskSecretsEl = $<HTMLInputElement>('mask-secrets');
+  const loadDemoBtn = $<HTMLButtonElement>('load-demo');
+  const resetAllBtn = $<HTMLButtonElement>('reset-all');
+
+  const currentEnvLabelEl = $('current-env-label');
+  const targetEnvLabelEl = $('target-env-label');
+  const toggleSampleBtn = $<HTMLButtonElement>('toggle-sample-editor');
+  const sampleChevronEl = $('sample-chevron');
+  const sampleBodyEl = $('sample-body');
+  const adoptNsBtn = $<HTMLButtonElement>('adopt-ns-btn');
+
+  const toggleK8sCmdBtn = $<HTMLButtonElement>('toggle-k8s-cmd');
+  const quickOsLabelEl = $('quick-os-label');
+  const quickCmdCodeEl = $('quick-cmd-code');
+  const copyQuickCmdBtn = $<HTMLButtonElement>('copy-quick-cmd');
+  const k8sFetchBoxEl = $('k8s-fetch-box');
+  const k8sNsEl = $<HTMLInputElement>('k8s-ns');
+  const k8sOsEl = $<HTMLSelectElement>('k8s-os');
+  const k8sPipeClipEl = $<HTMLInputElement>('k8s-pipe-clip');
+  const k8sCmdListEl = $<HTMLUListElement>('k8s-cmd-list');
+  const k8sInstallListEl = $<HTMLUListElement>('k8s-install-list');
+
+  const ua = navigator.userAgent;
+  k8sOsEl.value = /Windows/.test(ua)
+    ? 'windows'
+    : /Mac OS X/.test(ua) && !/iPhone|iPad/.test(ua)
+      ? 'macos'
+      : 'linux';
+
+  const sampleInEl = $<HTMLTextAreaElement>('sample-in');
+  const sampleMaskHintEl = $('sample-mask-hint');
+  const sampleStatusEl = $('sample-status');
+  const sampleErrEl = $('sample-err');
+  const unsavedBadgeEl = $('unsaved-badge');
+  const saveSampleBtn = $<HTMLButtonElement>('save-sample');
+
+  const targetInEl = $<HTMLTextAreaElement>('target-in');
+  const targetErrEl = $('target-err');
+  const analyzeBtn = $<HTMLButtonElement>('analyze-btn');
+  const resultsWrapEl = $('results-wrap');
+  const summaryPillsEl = $('summary-pills');
+  const exportFmtEl = $<HTMLSelectElement>('export-fmt');
+  const suggestBodyEl = $('suggest-body');
+  const copyOutBtn = $<HTMLButtonElement>('copy-out');
+
+  const SOURCE_LABELS: Record<Source, { label: string; cls: string }> = {
+    key: { label: 'exact key', cls: 'src-key' },
+    fuzzy: { label: 'fuzzy match', cls: 'src-fuzzy' },
+    token: { label: 'token rule', cls: 'src-token' },
+    unchanged: { label: 'unchanged', cls: 'src-unchanged' },
+    review: { label: 'needs review', cls: 'src-review' },
+  };
+
+  function setSampleCollapsed(collapsed: boolean) {
+    state.sampleCollapsed = collapsed;
+    sampleBodyEl.hidden = collapsed;
+    toggleSampleBtn.setAttribute('aria-expanded', String(!collapsed));
+    sampleChevronEl.textContent = collapsed ? '▸' : '▾';
+    saveState();
+  }
+
+  const OS_SHORT_LABEL: Record<FetchOS, string> = {
+    macos: 'macOS',
+    linux: 'Linux',
+    windows: 'Windows',
+  };
+
+  function renderK8sCommands() {
+    const os = k8sOsEl.value as FetchOS;
+    const bundle = buildKubectlFetchCommands(
+      k8sNsEl.value,
+      os,
+      k8sPipeClipEl.checked,
+    );
+    quickOsLabelEl.textContent = OS_SHORT_LABEL[os];
+    quickCmdCodeEl.textContent = bundle.commands[0].cmd;
+
+    k8sCmdListEl.innerHTML = bundle.commands
+      .map(
+        (c, i) => `<li class="k8s-cmd-item">
+        <div class="k8s-cmd-top">
+          <strong>${esc(c.label)}</strong>
+          <button type="button" class="btn ghost tiny-btn" data-copy-cmd="${esc(c.cmd)}" data-code-id="k8s-cmd-${i}">Copy command</button>
+        </div>
+        <code id="k8s-cmd-${i}" class="k8s-cmd-code">${esc(c.cmd)}</code>
+        <span class="muted tiny-hint">${esc(c.hint)}</span>
+      </li>`,
+      )
+      .join('');
+
+    k8sInstallListEl.innerHTML = bundle.install
+      .map(
+        ([cmd, label], i) => `<li class="k8s-install-item">
+        <span class="muted">${esc(label)}:</span>
+        <code id="k8s-inst-${i}">${esc(cmd)}</code>
+        <button type="button" class="btn ghost tiny-btn" data-copy-cmd="${esc(cmd)}" data-code-id="k8s-inst-${i}">Copy</button>
+      </li>`,
+      )
+      .join('');
+  }
+
+  function renderEnvList() {
+    envListEl.innerHTML = state.envs
+      .map((env) => {
+        const isCurrent = env.id === state.selected;
+        const currentAttr = isCurrent ? 'aria-current="true"' : '';
+        const canDelete = state.envs.length > 1;
+        const keyCount = countEnvKeys(env.text);
+        return `<li class="env-tab ${isCurrent ? 'is-active' : ''}">
+          <button type="button" class="env-select-btn" data-select-env="${esc(env.id)}" ${currentAttr}>
+            <span class="env-tab-name">${esc(env.name)}</span>
+            <span class="env-tab-count" title="${keyCount} saved keys">${keyCount}</span>
+          </button>
+          ${
+            canDelete
+              ? `<button type="button" class="env-del-btn" data-del-env="${esc(env.id)}" aria-label="Delete environment ${esc(env.name)}" title="Delete ${esc(env.name)}">×</button>`
+              : ''
+          }
+        </li>`;
+      })
+      .join('');
+  }
+
+  function updateSampleStatus() {
+    const env = currentEnv();
+    const raw = sampleInEl.value;
+    const isDirty = env ? raw !== env.text : false;
+    unsavedBadgeEl.hidden = !isDirty;
+    adoptNsBtn.hidden = true;
+
+    sampleErrEl.textContent = '';
+    if (!raw.trim()) {
+      sampleStatusEl.textContent = '0 keys — click “☸ Fetch from K8s” to pull ConfigMaps & Secrets';
+      sampleInEl.classList.remove('is-blurred-secret');
+      sampleMaskHintEl.hidden = true;
+      return;
+    }
+    try {
+      const parsed = parseEnvInput(raw);
+      const secCount = parsed.secretKeys.size;
+      const secNote = secCount > 0 ? ` · 🔒 ${secCount} secret${secCount === 1 ? '' : 's'}` : '';
+      const savedNote = (state.storageMode ?? 'all') !== 'session' ? ' · Saved to localStorage' : ' · Session only';
+      sampleStatusEl.textContent = `${parsed.format || 'auto'} · ${parsed.pairs.length} key${parsed.pairs.length === 1 ? '' : 's'}${secNote}${savedNote}`;
+      const shouldBlur = Boolean(state.maskSecrets && secCount > 0);
+      sampleInEl.classList.toggle('is-blurred-secret', shouldBlur);
+      sampleMaskHintEl.hidden = !shouldBlur;
+
+      if (parsed.detectedNamespace && env && parsed.detectedNamespace !== env.name) {
+        adoptNsBtn.dataset.detectedNs = parsed.detectedNamespace;
+        adoptNsBtn.textContent = `Rename tab to "${parsed.detectedNamespace}"`;
+        adoptNsBtn.hidden = false;
+      }
+    } catch (e) {
+      sampleStatusEl.textContent = 'Failed to parse sample data';
+      sampleErrEl.textContent = (e as Error).message;
+      sampleInEl.classList.remove('is-blurred-secret');
+      sampleMaskHintEl.hidden = true;
+    }
+  }
+
+  function syncSelectedEnvToUI() {
+    const env = currentEnv();
+    const name = env?.name ?? '—';
+    currentEnvLabelEl.textContent = name;
+    targetEnvLabelEl.textContent = name;
+    k8sNsEl.value = name;
+    renderK8sCommands();
+    sampleInEl.value = env?.text ?? '';
+    updateSampleStatus();
+  }
+
+  function renderSummaryPills() {
+    const counts: Record<Source, number> = { key: 0, fuzzy: 0, token: 0, unchanged: 0, review: 0 };
+    for (const s of currentSuggestions) counts[s.source]++;
+
+    const pills: { id: Source | 'all'; text: string }[] = [
+      { id: 'all', text: `All (${currentSuggestions.length})` },
+    ];
+    (Object.keys(SOURCE_LABELS) as Source[]).forEach((src) => {
+      if (counts[src] > 0) {
+        pills.push({ id: src, text: `${counts[src]} ${SOURCE_LABELS[src].label}` });
+      }
+    });
+
+    if (activeFilter !== 'all' && counts[activeFilter] === 0) {
+      activeFilter = 'all';
+    }
+
+    summaryPillsEl.innerHTML = pills
+      .map(
+        (p) =>
+          `<button type="button" class="pill-btn ${activeFilter === p.id ? 'is-active' : ''}" data-filter="${p.id}">${esc(p.text)}</button>`,
+      )
+      .join('');
+  }
+
+  function formatBadgeHtml(s: Suggestion): string {
+    const badge = SOURCE_LABELS[s.source];
+    const lock = s.secret ? `<span class="sec-lock" title="Sensitive value (Secret)">🔒</span> ` : '';
+    if (s.source === 'fuzzy') {
+      const pct = Math.round((s.score ?? 0) * 100);
+      const targetKey = s.matchedKey ? ` → <code>${esc(s.matchedKey)}</code>` : '';
+      return `${lock}<span class="badge ${badge.cls}" title="${esc(s.note ?? '')}">fuzzy ${pct}%${targetKey}</span>`;
+    }
+    return `${lock}<span class="badge ${badge.cls}" title="${esc(s.note ?? '')}">${esc(badge.label)}</span>`;
+  }
+
+  function maskText(v: string): string {
+    if (!v) return '';
+    return '•'.repeat(Math.min(12, Math.max(6, v.length)));
+  }
+
+  function renderSuggestions() {
+    if (currentSuggestions.length === 0) {
+      resultsWrapEl.hidden = true;
+      return;
+    }
+    resultsWrapEl.hidden = false;
+    renderSummaryPills();
+
+    const rowsHtml = currentSuggestions
+      .map((s, idx) => {
+        if (activeFilter !== 'all' && s.source !== activeFilter) return '';
+        const rowClass = s.source === 'review' ? 'row-review' : '';
+        const isMasked = Boolean(state.maskSecrets && s.secret && !revealedRows.has(idx));
+        const hasAlts = s.source === 'fuzzy' && s.alternatives && s.alternatives.length > 0;
+        const listId = hasAlts ? `alt-list-${idx}` : '';
+        const options = hasAlts
+          ? [
+              { key: s.matchedKey ?? s.key, value: s.value, score: s.score ?? 1 },
+              ...s.alternatives!,
+            ]
+          : [];
+
+        const inDisplay = isMasked ? maskText(s.input) : s.input;
+        const inTitle = isMasked ? 'Sensitive value masked' : s.input;
+
+        return `<tr class="${rowClass}">
+          <td class="col-key"><code title="${esc(s.key)}">${esc(s.key)}</code></td>
+          <td class="col-in"><code class="in-val ${isMasked ? 'mask' : ''}" title="${esc(inTitle)}">${esc(inDisplay)}</code></td>
+          <td class="col-val">
+            <div class="val-combo">
+              <div class="val-input-row">
+                <input
+                  type="${isMasked ? 'password' : 'text'}"
+                  class="code val-input"
+                  data-idx="${idx}"
+                  ${listId ? `list="${listId}"` : ''}
+                  value="${esc(s.value)}"
+                  aria-label="Suggested value for ${esc(s.key)}"
+                />
+                ${
+                  s.secret && state.maskSecrets
+                    ? `<button type="button" class="btn ghost eye-btn" data-toggle-eye="${idx}" title="${isMasked ? 'Show secret for this row' : 'Hide secret for this row'}" aria-label="Toggle secret visibility for ${esc(s.key)}">${isMasked ? 'Show' : 'Hide'}</button>`
+                    : ''
+                }
+              </div>
+              ${
+                hasAlts
+                  ? `<datalist id="${listId}">${options
+                      .map(
+                        (o) =>
+                          `<option value="${esc(o.value)}" label="${esc(o.key)} (${Math.round(o.score * 100)}%)"></option>`,
+                      )
+                      .join('')}</datalist>
+                    <select class="alt-select" data-alt-idx="${idx}" aria-label="Choose alternative fuzzy match for ${esc(s.key)}" title="Choose another candidate">
+                      ${options
+                        .map(
+                          (o) =>
+                            `<option value="${esc(o.value)}" data-key="${esc(o.key)}" data-score="${o.score}">${esc(o.key)} (${Math.round(o.score * 100)}%): ${esc(isMasked ? maskText(o.value) : o.value)}</option>`,
+                        )
+                        .join('')}
+                    </select>`
+                  : ''
+              }
+            </div>
+          </td>
+          <td class="col-src" id="src-cell-${idx}">
+            ${formatBadgeHtml(s)}
+          </td>
+        </tr>`;
+      })
+      .join('');
+
+    suggestBodyEl.innerHTML =
+      rowsHtml || `<tr><td colspan="4" class="muted">No keys match this filter.</td></tr>`;
+  }
+
+  function syncSampleInputToState() {
+    const env = currentEnv();
+    if (env) {
+      env.text = sampleInEl.value;
+    }
+  }
+
+  function runAnalyze() {
+    targetErrEl.textContent = '';
+    syncSampleInputToState();
+    const raw = targetInEl.value;
+    state.draft = raw;
+    saveState();
+
+    if (!raw.trim()) {
+      currentSuggestions = [];
+      resultsWrapEl.hidden = true;
+      return;
+    }
+
+    try {
+      const parsed = parseEnvInput(raw);
+      currentFormat = parsed.format;
+      currentOriginal = raw;
+      revealedRows.clear();
+      currentSuggestions = suggest(parsed.pairs, state.envs, state.selected, parsed.secretKeys);
+      renderSuggestions();
+    } catch (e) {
+      currentSuggestions = [];
+      resultsWrapEl.hidden = true;
+      targetErrEl.textContent = (e as Error).message;
+    }
+  }
+
+  toggleSampleBtn.addEventListener('click', () => {
+    setSampleCollapsed(!state.sampleCollapsed);
+  });
+
+  adoptNsBtn.addEventListener('click', () => {
+    const ns = adoptNsBtn.dataset.detectedNs;
+    const env = currentEnv();
+    if (!ns || !env) return;
+    env.name = ns;
+    env.text = sampleInEl.value;
+    saveState();
+    renderEnvList();
+    syncSelectedEnvToUI();
+    if (targetInEl.value.trim()) runAnalyze();
+  });
+
+  copyQuickCmdBtn.addEventListener('click', () => {
+    copyText(copyQuickCmdBtn, quickCmdCodeEl.textContent ?? '', quickCmdCodeEl);
+  });
+
+  toggleK8sCmdBtn.addEventListener('click', () => {
+    const nextHidden = !k8sFetchBoxEl.hidden;
+    k8sFetchBoxEl.hidden = nextHidden;
+    toggleK8sCmdBtn.setAttribute('aria-expanded', String(!nextHidden));
+  });
+
+  k8sNsEl.addEventListener('input', renderK8sCommands);
+  k8sOsEl.addEventListener('change', renderK8sCommands);
+  k8sPipeClipEl.addEventListener('change', renderK8sCommands);
+
+  k8sFetchBoxEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-copy-cmd]');
+    if (!btn) return;
+    const codeEl = btn.dataset.codeId ? document.getElementById(btn.dataset.codeId) : null;
+    copyText(btn, btn.dataset.copyCmd ?? '', codeEl);
+  });
+
+  storageModeEl.addEventListener('change', () => {
+    syncSampleInputToState();
+    state.storageMode = storageModeEl.value as StorageMode;
+    saveState();
+    updateSampleStatus();
+  });
+
+  maskSecretsEl.addEventListener('change', () => {
+    state.maskSecrets = maskSecretsEl.checked;
+    revealedRows.clear();
+    saveState();
+    updateSampleStatus();
+    renderSuggestions();
+  });
+
+  loadDemoBtn.addEventListener('click', () => {
+    state.envs = DEFAULT_ENVS.map((e) => ({ ...e }));
+    state.selected = 'prod';
+    state.draft = DEMO_TARGET_INPUT;
+    activeFilter = 'all';
+    targetInEl.value = state.draft;
+    saveState();
+    renderEnvList();
+    syncSelectedEnvToUI();
+    runAnalyze();
+  });
+
+  envListEl.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const selectBtn = target.closest<HTMLButtonElement>('button[data-select-env]');
+    if (selectBtn) {
+      const id = selectBtn.dataset.selectEnv!;
+      if (id !== state.selected) {
+        syncSampleInputToState();
+        state.selected = id;
+        saveState();
+        renderEnvList();
+        syncSelectedEnvToUI();
+        if (targetInEl.value.trim()) runAnalyze();
+      }
+      return;
+    }
+
+    const delBtn = target.closest<HTMLButtonElement>('button[data-del-env]');
+    if (delBtn) {
+      const id = delBtn.dataset.delEnv!;
+      const env = state.envs.find((x) => x.id === id);
+      if (!env || state.envs.length <= 1) return;
+      if (!window.confirm(`Delete environment "${env.name}"?`)) return;
+      syncSampleInputToState();
+      state.envs = state.envs.filter((x) => x.id !== id);
+      if (state.selected === id) state.selected = state.envs[0].id;
+      saveState();
+      renderEnvList();
+      syncSelectedEnvToUI();
+      if (targetInEl.value.trim()) runAnalyze();
+    }
+  });
+
+  addFormEl.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = newEnvNameEl.value.trim();
+    if (!name) return;
+    syncSampleInputToState();
+    const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
+    state.envs.push({ id, name, text: '' });
+    state.selected = id;
+    newEnvNameEl.value = '';
+    setSampleCollapsed(false);
+    saveState();
+    renderEnvList();
+    syncSelectedEnvToUI();
+    sampleInEl.focus();
+    if (targetInEl.value.trim()) runAnalyze();
+  });
+
+  resetAllBtn.addEventListener('click', () => {
+    if (!window.confirm('Clear all saved environments and sample data and restore defaults?')) return;
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    state = {
+      envs: DEFAULT_ENVS.map((e) => ({ ...e })),
+      selected: 'prod',
+      draft: '',
+      storageMode: 'all',
+      maskSecrets: true,
+      sampleCollapsed: false,
+    };
+    storageModeEl.value = 'all';
+    maskSecretsEl.checked = true;
+    setSampleCollapsed(false);
+    targetInEl.value = '';
+    currentSuggestions = [];
+    resultsWrapEl.hidden = true;
+    renderEnvList();
+    syncSelectedEnvToUI();
+    saveState();
+  });
+
+  const handleSampleChange = () => {
+    syncSampleInputToState();
+    saveState();
+    renderEnvList();
+    updateSampleStatus();
+    if (targetInEl.value.trim()) runAnalyze();
+  };
+
+  sampleInEl.addEventListener('input', handleSampleChange);
+  sampleInEl.addEventListener('change', handleSampleChange);
+
+  let saveFeedbackTimer: number | undefined;
+  saveSampleBtn.addEventListener('click', () => {
+    const env = currentEnv();
+    if (!env) return;
+    if (state.storageMode === 'session') {
+      state.storageMode = 'all';
+      storageModeEl.value = 'all';
+    }
+    env.text = sampleInEl.value;
+    saveState();
+    renderEnvList();
+    updateSampleStatus();
+    if (targetInEl.value.trim()) runAnalyze();
+
+    saveSampleBtn.textContent = 'Saved ✓';
+    window.clearTimeout(saveFeedbackTimer);
+    saveFeedbackTimer = window.setTimeout(() => {
+      saveSampleBtn.textContent = 'Save sample';
+    }, 1500);
+  });
+
+  targetInEl.addEventListener('input', () => {
+    state.draft = targetInEl.value;
+    saveState();
+  });
+
+  const flushToStorage = () => {
+    syncSampleInputToState();
+    state.draft = targetInEl.value;
+    saveState();
+  };
+  window.addEventListener('pagehide', flushToStorage);
+  window.addEventListener('beforeunload', flushToStorage);
+
+  analyzeBtn.addEventListener('click', runAnalyze);
+
+  summaryPillsEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-filter]');
+    if (!btn) return;
+    activeFilter = btn.dataset.filter as Source | 'all';
+    renderSuggestions();
+  });
+
+  suggestBodyEl.addEventListener('click', (e) => {
+    const eyeBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-toggle-eye]');
+    if (!eyeBtn) return;
+    const idx = Number(eyeBtn.dataset.toggleEye);
+    if (revealedRows.has(idx)) revealedRows.delete(idx);
+    else revealedRows.add(idx);
+    renderSuggestions();
+  });
+
+  suggestBodyEl.addEventListener('input', (e) => {
+    const input = (e.target as HTMLElement).closest<HTMLInputElement>('input.val-input');
+    if (!input) return;
+    const idx = Number(input.dataset.idx);
+    if (currentSuggestions[idx]) {
+      currentSuggestions[idx].value = input.value;
+    }
+  });
+
+  suggestBodyEl.addEventListener('change', (e) => {
+    const sel = (e.target as HTMLElement).closest<HTMLSelectElement>('select.alt-select');
+    if (!sel) return;
+    const idx = Number(sel.dataset.altIdx);
+    const s = currentSuggestions[idx];
+    if (!s) return;
+    const opt = sel.selectedOptions[0];
+    s.value = sel.value;
+    if (opt?.dataset.key) s.matchedKey = opt.dataset.key;
+    if (opt?.dataset.score) s.score = Number(opt.dataset.score);
+    s.note = `Fuzzy match ${Math.round((s.score ?? 0) * 100)}% → ${s.matchedKey ?? ''}`;
+
+    const textInput = suggestBodyEl.querySelector<HTMLInputElement>(`input.val-input[data-idx="${idx}"]`);
+    if (textInput) textInput.value = s.value;
+    const srcCell = document.getElementById(`src-cell-${idx}`);
+    if (srcCell) srcCell.innerHTML = formatBadgeHtml(s);
+  });
+
+  copyOutBtn.addEventListener('click', () => {
+    const map = new Map<string, string>();
+    for (const s of currentSuggestions) map.set(s.key, s.value);
+    const envName = currentEnv()?.name ?? 'default';
+    const out = serializeAs(
+      exportFmtEl.value as ExportFormat,
+      currentFormat,
+      currentOriginal,
+      map,
+      { name: `app-${envName}`, namespace: envName },
+    );
+    copyText(copyOutBtn, out);
+  });
+
+  // Initial render
+  storageModeEl.value = state.storageMode ?? 'all';
+  maskSecretsEl.checked = state.maskSecrets ?? true;
+  setSampleCollapsed(Boolean(state.sampleCollapsed));
+  targetInEl.value = state.draft;
+  renderEnvList();
+  syncSelectedEnvToUI();
+  if (state.draft.trim()) runAnalyze();
+</script>
+
+<style>
+  .env-workspace {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  /* Compact Horizontal Context Bar */
+  .context-bar {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.6rem 0.85rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    flex-wrap: wrap;
+  }
+  .env-strip-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .strip-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .env-strip {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  .env-tab {
+    display: inline-flex;
+    align-items: center;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .env-tab.is-active {
+    background: color-mix(in srgb, var(--mask) 22%, var(--surface));
+    border-color: var(--mask);
+  }
+  .env-select-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: transparent;
+    color: var(--ink);
+    border: 0;
+    padding: 0.25rem 0.65rem;
+    font: inherit;
+    font-size: 0.86rem;
+    cursor: pointer;
+  }
+  .env-tab.is-active .env-select-btn {
+    font-weight: 700;
+  }
+  .env-tab-count {
+    font-size: 0.74rem;
+    padding: 0.05rem 0.38rem;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-family: var(--font-code);
+  }
+  .env-del-btn {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 0;
+    border-left: 1px solid var(--line);
+    padding: 0.22rem 0.45rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .env-del-btn:hover {
+    color: var(--err);
+    background: color-mix(in srgb, var(--err) 12%, transparent);
+  }
+
+  .inline-add-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .inline-add-form input {
+    width: 9.5rem;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.82rem;
+    border-radius: 999px;
+  }
+
+  .bar-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .compact-check {
+    margin: 0;
+    font-size: 0.83rem;
+    white-space: nowrap;
+  }
+  .inline-select-label {
+    margin: 0;
+    display: inline-flex;
+  }
+  .small-select {
+    padding: 0.26rem 0.5rem;
+    font-size: 0.82rem;
+    width: auto;
+  }
+  .style-demo-btn {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    color: var(--accent);
+  }
+  .danger-btn:hover {
+    border-color: var(--err);
+    color: var(--err);
+  }
+
+  /* Panels */
+  .panel {
+    display: grid;
+    gap: 0.65rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.9rem 1rem;
+    min-width: 0;
+  }
+  .sample-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: transparent;
+    color: var(--ink);
+    border: 0;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .chevron {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    width: 0.85rem;
+  }
+  .panel-title {
+    font-size: 1.02rem;
+    margin: 0;
+  }
+  .small-status {
+    margin: 0;
+    font-size: 0.83rem;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+  .small-btn {
+    padding: 0.32rem 0.7rem;
+    font-size: 0.86rem;
+  }
+  .tiny-btn {
+    padding: 0.22rem 0.55rem;
+    font-size: 0.78rem;
+  }
+  .tiny-hint {
+    margin: 0.2rem 0 0;
+    font-size: 0.78rem;
+  }
+  .status-err:empty {
+    display: none;
+  }
+
+  .sample-editor-wrap[hidden] {
+    display: none;
+  }
+  .quick-cmd-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.82rem;
+    flex-wrap: wrap;
+  }
+  .quick-cmd-label {
+    color: var(--ink-soft);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .quick-cmd-code {
+    flex: 1;
+    min-width: 14rem;
+    background: transparent !important;
+    padding: 0 !important;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 0.82rem;
+  }
+  .sample-textarea {
+    min-height: 6.5rem;
+  }
+  .target-textarea {
+    min-height: 7.5rem;
+  }
+
+  .k8s-box {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+  }
+  .k8s-box[hidden] {
+    display: none;
+  }
+  .k8s-box-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    flex-wrap: wrap;
+  }
+  .k8s-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .ns-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    font-size: 0.82rem;
+  }
+  .ns-input {
+    width: 7rem !important;
+    padding: 0.22rem 0.45rem !important;
+    font-size: 0.82rem !important;
+  }
+  .pipe-check {
+    margin: 0;
+    font-size: 0.82rem;
+  }
+  .k8s-cmd-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.45rem;
+  }
+  .k8s-cmd-item {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    padding: 0.45rem 0.6rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .k8s-cmd-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .k8s-cmd-code {
+    display: block;
+    overflow-x: auto;
+    white-space: pre;
+    font-size: 0.8rem;
+    padding: 0.22rem 0.4rem;
+    background: var(--surface-2);
+    border-radius: var(--radius-s);
+  }
+  .k8s-install-box {
+    border-top: 1px solid var(--line);
+    padding-top: 0.45rem;
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.79rem;
+  }
+  .k8s-install-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+  .k8s-install-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .sample-editor-wrap textarea.is-blurred-secret:not(:focus) {
+    filter: blur(4px);
+    transition: filter 0.15s ease;
+  }
+
+  .results {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.2rem;
+  }
+  .results[hidden] {
+    display: none;
+  }
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .summary-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .pill-btn {
+    background: var(--surface-2);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .pill-btn.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+  .export-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .suggest-table th,
+  .suggest-table td {
+    vertical-align: middle;
+  }
+  .col-key {
+    width: 24%;
+    word-break: break-all;
+  }
+  .col-in {
+    width: 24%;
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .in-val {
+    color: var(--ink-soft);
+  }
+  .col-val {
+    width: 34%;
+  }
+  .val-combo {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .val-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .val-input {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+    flex: 1;
+  }
+  .eye-btn {
+    padding: 0.28rem 0.5rem;
+    font-size: 0.76rem;
+    flex-shrink: 0;
+  }
+  .alt-select {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+  }
+  .col-src {
+    width: 18%;
+    white-space: nowrap;
+  }
+  .sec-lock {
+    font-size: 0.82rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-s);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .badge :global(code) {
+    background: transparent;
+    padding: 0;
+    font-size: 0.92em;
+  }
+  .badge-warn,
+  .src-review {
+    background: var(--mask);
+    color: var(--mask-ink);
+  }
+  .src-key {
+    background: color-mix(in srgb, var(--ok) 18%, transparent);
+    color: var(--ok);
+  }
+  .src-fuzzy {
+    background: color-mix(in srgb, var(--ok) 12%, var(--accent) 12%);
+    color: var(--accent);
+  }
+  .src-token {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+  }
+  .src-unchanged {
+    background: var(--surface-2);
+    color: var(--ink-soft);
+  }
+  .row-review td {
+    background: color-mix(in srgb, var(--mask) 10%, transparent);
+  }
+</style>

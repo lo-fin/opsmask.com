@@ -1,0 +1,275 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+
+const sample = `{
+  // App & database configuration
+  "AppName": "billing-api",
+  "Environment": "production",
+  "Port": 8080,
+  "Database": {
+    "Host": "pg-prod.internal.net",
+    "User": "billing_app",
+    "Password": "v3ry-s3cr3t-db-password!",
+    "ConnectionString": "Host=pg-prod.internal.net;Port=5432;Database=billing;Username=billing_app;Password=v3ry-s3cr3t-db-password!;SSL Mode=Require;Trust Server Certificate=true"
+  },
+  "RedisEndpoints": [
+    "redis-0.internal.net:6379",
+    "redis-1.internal.net:6379"
+  ],
+  "SecretString": "{\\"STRIPE_API_KEY\\":\\"rk_live_987654321\\",\\"WEBHOOK_SECRET\\":\\"whsec_abcdef123456\\"}"
+}`;
+---
+<ToolShell slug="json-values">
+  <div class="block">
+    <div class="row">
+      <label for="json-in">JSON input</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea
+      id="json-in"
+      class="code"
+      spellcheck="false"
+      placeholder='Paste a JSON object or array, e.g. {"DB_HOST": "localhost", "DB_PASS": "secret"}'
+    ></textarea>
+
+    <div class="controls">
+      <label class="mode-label" for="flatten-mode">
+        Nested keys
+        <select id="flatten-mode">
+          <option value="dot">Flatten with dots (a.b[0])</option>
+          <option value="env">Flatten with __ (a__b__0)</option>
+          <option value="top">Top-level keys only</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="unwrap-json" checked /> Unwrap embedded JSON strings</label>
+      <label class="check"><input type="checkbox" id="mask-vals" /> Mask values on screen</label>
+    </div>
+
+    <ul id="json-notes" class="notes-list"></ul>
+    <p id="json-err" class="status-err" aria-live="polite"></p>
+
+    <div id="results-wrap" class="results" hidden>
+      <div class="toolbar">
+        <input
+          id="filter-in"
+          type="search"
+          class="code filter-input"
+          placeholder="Filter by key or value…"
+          aria-label="Filter by key or value"
+        />
+        <div class="toolbar-right">
+          <span id="count-label" class="muted small" aria-live="polite"></span>
+          <button class="btn ghost small-btn" type="button" id="copy-env">Copy all as .env</button>
+        </div>
+      </div>
+
+      <table id="values-table" class="fixed-table">
+        <thead>
+          <tr>
+            <th class="key-col">Key / Path</th>
+            <th class="val-col">Value</th>
+            <th class="act-col"><span class="sr-only">Copy</span></th>
+          </tr>
+        </thead>
+        <tbody id="values-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>What this accepts</h2>
+    <p>Standard JSON objects and arrays, <code>.NET appsettings.json</code> with <code>//</code> or <code>/* */</code> comments and trailing commas, and double-encoded JSON strings. When <strong>Unwrap embedded JSON strings</strong> is checked, string values that contain a JSON object or array (such as <code>SecretString</code> from <code>aws secretsmanager get-secret-value</code>) are expanded automatically so you can copy each inner value directly.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  import { extractJsonValues, type FlattenMode, type JsonValueItem } from '../../lib/json-values';
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+  const inputEl = $<HTMLTextAreaElement>('json-in');
+  const modeEl = $<HTMLSelectElement>('flatten-mode');
+  const unwrapEl = $<HTMLInputElement>('unwrap-json');
+  const maskEl = $<HTMLInputElement>('mask-vals');
+  const filterEl = $<HTMLInputElement>('filter-in');
+  const errEl = $('json-err');
+  const notesEl = $('json-notes');
+  const wrapEl = $('results-wrap');
+  const tbodyEl = $('values-body');
+  const countEl = $('count-label');
+
+  let currentItems: JsonValueItem[] = [];
+  let filteredItems: JsonValueItem[] = [];
+
+  function parse() {
+    errEl.textContent = '';
+    notesEl.innerHTML = '';
+    const raw = inputEl.value;
+    if (!raw.trim()) {
+      currentItems = [];
+      wrapEl.hidden = true;
+      return;
+    }
+    try {
+      const res = extractJsonValues(raw, {
+        mode: modeEl.value as FlattenMode,
+        unwrapJsonStrings: unwrapEl.checked,
+      });
+      currentItems = res.items;
+      notesEl.innerHTML = res.notes.map((n) => `<li>${esc(n)}</li>`).join('');
+      wrapEl.hidden = currentItems.length === 0;
+      renderTable();
+    } catch (e) {
+      currentItems = [];
+      wrapEl.hidden = true;
+      errEl.textContent = (e as Error).message;
+    }
+  }
+
+  function renderTable() {
+    const q = filterEl.value.trim().toLowerCase();
+    const masked = maskEl.checked;
+    filteredItems = q
+      ? currentItems.filter((it) => it.key.toLowerCase().includes(q) || it.value.toLowerCase().includes(q))
+      : currentItems;
+
+    countEl.textContent =
+      q && filteredItems.length !== currentItems.length
+        ? `${filteredItems.length} of ${currentItems.length} values`
+        : `${currentItems.length} value${currentItems.length === 1 ? '' : 's'}`;
+
+    if (filteredItems.length === 0) {
+      tbodyEl.innerHTML = `<tr><td colspan="3" class="muted">No matching keys or values.</td></tr>`;
+      return;
+    }
+
+    tbodyEl.innerHTML = filteredItems
+      .map((item, idx) => {
+        let displayVal: string;
+        if (item.type === 'null') {
+          displayVal = `<span class="muted">null</span>`;
+        } else if (item.value === '') {
+          displayVal = `<span class="muted">(empty)</span>`;
+        } else if (masked) {
+          displayVal = `<span class="mask">${'•'.repeat(Math.min(14, Math.max(4, item.value.length)))}</span>`;
+        } else {
+          const singleLine = item.value.replace(/\r?\n/g, ' ↵ ');
+          displayVal = `<span class="val" id="val-${idx}" title="${esc(item.value)}">${esc(singleLine)}</span>`;
+        }
+
+        const disabled = item.type === 'null' || item.value === '' ? 'disabled' : '';
+        return `<tr>
+          <td class="key-cell" title="${esc(item.key)}">
+            <code class="key-code" id="key-${idx}">${esc(item.key)}</code>
+          </td>
+          <td class="val-cell">${displayVal}</td>
+          <td class="act-col">
+            <button class="btn ghost copy-val-btn" type="button" data-copy-val="${idx}" ${disabled}>Copy</button>
+          </td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  tbodyEl.addEventListener('click', (e) => {
+    const target = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-copy-val]');
+    if (!target) return;
+    const idx = Number(target.dataset.copyVal);
+    const item = filteredItems[idx];
+    if (item) copyText(target, item.value, document.getElementById(`val-${idx}`));
+  });
+
+  $('copy-env').addEventListener('click', (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    const envLines = filteredItems
+      .map((it) => {
+        const k = it.key.replace(/[^a-zA-Z0-9_]/g, '_');
+        const needsQuotes = /[\s#"']/.test(it.value);
+        const v = needsQuotes ? `"${it.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"` : it.value;
+        return `${k}=${v}`;
+      })
+      .join('\n');
+    copyText(btn, envLines);
+  });
+
+  inputEl.addEventListener('input', parse);
+  modeEl.addEventListener('change', parse);
+  unwrapEl.addEventListener('change', parse);
+  maskEl.addEventListener('change', renderTable);
+  filterEl.addEventListener('input', renderTable);
+  $('load-sample').addEventListener('click', () => {
+    inputEl.value = JSON.parse($('sample').textContent!);
+    parse();
+  });
+</script>
+
+<style>
+  .block { display: grid; gap: 0.75rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.25rem; }
+  .row label { margin: 0; }
+  .row .btn, .small-btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; }
+  .mode-label { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; font-weight: 400; }
+  .mode-label select { width: auto; padding: 0.3rem 0.6rem; }
+  .notes-list { margin: 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: 0.9rem; }
+  .notes-list:empty { display: none; }
+  .status-err:empty { display: none; }
+  .results { display: grid; gap: 0.75rem; min-width: 0; }
+  .results[hidden] { display: none; }
+  .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .filter-input { max-width: 22rem; padding: 0.4rem 0.65rem; }
+  .toolbar-right { display: flex; align-items: center; gap: 0.75rem; }
+  .small { font-size: 0.85rem; }
+
+  .fixed-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .fixed-table th,
+  .fixed-table td {
+    vertical-align: middle;
+  }
+  .key-col,
+  .key-cell {
+    width: 34%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .key-code {
+    display: inline;
+  }
+  .val-col,
+  .val-cell {
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .val {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+  }
+  .act-col {
+    width: 6.25rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .copy-val-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.9rem;
+  }
+  @media (max-width: 640px) {
+    .filter-input { max-width: 100%; }
+    .key-col, .key-cell { width: 38%; }
+  }
+</style>

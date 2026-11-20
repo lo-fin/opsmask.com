@@ -1,0 +1,824 @@
+---
+import Base from '../layouts/Base.astro';
+import SearchBox from '../components/SearchBox.astro';
+import { TOOLS, TOOL_GROUPS } from '../data/tools';
+import { SITE } from '../config';
+import { getCollection } from 'astro:content';
+
+const cheatsheets = (await getCollection('cheatsheets')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+const prompts = (await getCollection('prompts')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+const guides = (await getCollection('guides')).sort((a, b) => b.data.published.localeCompare(a.data.published));
+const quick = [
+  { label: 'Decode a JWT', href: '/tools/jwt-decoder/' },
+  { label: 'Check K8s YAML', href: '/tools/k8s-manifest-checker/' },
+  { label: 'Env suggester', href: '/tools/env-suggest/' },
+  { label: 'Split a subnet', href: '/tools/cidr-calculator/' },
+  { label: 'Read a cron', href: '/tools/cron-explainer/' },
+  { label: 'Redact K8s', href: '/tools/k8s-redactor/' },
+];
+const demo = `2026-10-30T02:14:07Z ERROR db connect failed
+  Server=tcp:10.20.4.17,1433;User ID=app_rw;Password=Sup3r-S3cret!;
+  Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhcGktc3ZjIn0.k3y
+  retry 3/5 from 10.20.4.9 owner=oncall@example.com`;
+---
+<Base hideHeaderSearch wide>
+  <section class="hero">
+    <div class="hero-text">
+      <div class="hero-pill">
+        <span class="pill-dot" aria-hidden="true"></span>
+        <span>Zero-Trust Browser Workbench · No Backend · CSP Locked</span>
+      </div>
+      <h1>Paste logs into AI <span class="text-highlight">without leaking secrets.</span></h1>
+      <p class="sub">Client-side utilities, command cheatsheets and secret-masking AI prompts for Kubernetes, cloud networking and CI/CD. Everything executes locally in your browser tab.</p>
+      <SearchBox id="hero-search" size="hero" placeholder={`Search ${TOOLS.length} tools, jwt, cron, cidr, crashloop…`} />
+      <div class="quick" aria-label="Popular tools">
+        <span class="quick-label">Quick launch:</span>
+        {quick.map((q) => (
+          <a class="quick-chip" href={q.href}>{q.label}</a>
+        ))}
+      </div>
+    </div>
+
+    <div class="demo" aria-labelledby="demo-title">
+      <div class="demo-bar">
+        <div class="win-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <h2 id="demo-title">Live Redaction Sandbox</h2>
+        <span id="demo-count" class="badge badge-mask" aria-live="polite"></span>
+      </div>
+      <div class="demo-body">
+        <div class="demo-pane-head">
+          <label for="demo-in">Raw log / config input (try editing)</label>
+          <div class="demo-toggles">
+            <label class="mini-check"><input type="checkbox" id="demo-m-secrets" checked /> Secrets</label>
+            <label class="mini-check"><input type="checkbox" id="demo-m-ips" checked /> IPs</label>
+            <label class="mini-check"><input type="checkbox" id="demo-m-ids" checked /> Emails/IDs</label>
+          </div>
+        </div>
+        <textarea id="demo-in" class="code" spellcheck="false">{demo}</textarea>
+        <div class="demo-out-head">
+          <p class="demo-label">What the AI sees</p>
+          <button type="button" class="btn ghost small" id="demo-copy">Copy masked output</button>
+        </div>
+        <pre class="out" id="demo-out" aria-live="polite"></pre>
+        <div class="demo-foot">
+          <a class="demo-cta" href="/prompts/debug-crashloopbackoff/">
+            <span>Open in CrashLoopBackOff AI Prompt</span>
+            <span aria-hidden="true">→</span>
+          </a>
+          <a class="demo-secondary" href="/tools/k8s-redactor/">K8s YAML Redactor →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trust-strip" aria-label="Security and architecture guarantees">
+    <div class="trust-card">
+      <div class="trust-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      </div>
+      <div>
+        <h3>CSP Enforced Privacy</h3>
+        <p><code>connect-src 'self'</code> blocks scripts from sending pasted manifests, tokens or logs to any server.</p>
+      </div>
+    </div>
+    <div class="trust-card">
+      <div class="trust-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 10 3 3-3 3M11 16h6"/></svg>
+      </div>
+      <div>
+        <h3>{TOOLS.length} Offline-Ready Tools</h3>
+        <p>Inspect Kubernetes YAML, decode Secrets and JWTs, split CIDRs, and generate cross-OS CLI commands.</p>
+      </div>
+    </div>
+    <div class="trust-card">
+      <div class="trust-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+      </div>
+      <div>
+        <h3>Secret-Safe AI Prompts</h3>
+        <p>Structured prompts for incident response and manifest reviews that strip credentials before copying.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="directory-section" aria-labelledby="tools-heading">
+    <div class="section-head">
+      <div>
+        <h2 id="tools-heading"><a href="/tools/">Developer &amp; DevOps Tools</a></h2>
+        <p class="muted">Filter by category or open any tool directly—all run 100% in your browser.</p>
+      </div>
+      <div class="group-tabs" role="tablist" aria-label="Filter tools by category">
+        <button type="button" class="tab-btn is-active" data-group-filter="all" role="tab" aria-selected="true">
+          All <span class="tab-count">{TOOLS.length}</span>
+        </button>
+        {TOOL_GROUPS.map((g) => {
+          const count = TOOLS.filter((t) => t.group === g).length;
+          return (
+            <button type="button" class="tab-btn" data-group-filter={g} role="tab" aria-selected="false">
+              {g} <span class="tab-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    <ul class="tool-grid" id="home-tool-grid">
+      {TOOLS.map((t) => (
+        <li class="tool-card" data-group={t.group}>
+          <a href={`/tools/${t.slug}/`}>
+            <div class="card-top">
+              <span class="badge">{t.group}</span>
+              <span class="card-arrow" aria-hidden="true">→</span>
+            </div>
+            <h3>{t.title}</h3>
+            <p>{t.description}</p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="directory-section guides-section" aria-labelledby="guides-heading">
+    <div class="section-head">
+      <div>
+        <span class="badge badge-accent">In-Depth Playbooks</span>
+        <h2 id="guides-heading"><a href="/guides/">DevOps &amp; Kubernetes Guides</a></h2>
+        <p class="muted">Production-tested engineering articles paired with local browser tools.</p>
+      </div>
+      <a class="view-all" href="/guides/">View all guides →</a>
+    </div>
+    <ul class="tool-grid">
+      {guides.map((g) => (
+        <li class="tool-card">
+          <a href={`/guides/${g.id}/`}>
+            <div class="card-top">
+              <span class="badge badge-accent">{g.data.category}</span>
+              <span class="card-arrow" aria-hidden="true">{g.data.readingTime}</span>
+            </div>
+            <h3>{g.data.title}</h3>
+            <p>{g.data.description}</p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <div class="dual-sections">
+    <section class="sub-section" aria-labelledby="prompts-heading">
+      <div class="sub-head">
+        <div>
+          <span class="badge badge-mask">Auto-Redacting</span>
+          <h2 id="prompts-heading"><a href="/prompts/">AI Prompts</a></h2>
+        </div>
+        <a class="view-all" href="/prompts/">View all →</a>
+      </div>
+      <p class="muted">Fill in variables, inspect the redacted preview, and copy into ChatGPT, Claude or Copilot.</p>
+      <ul class="stack-cards">
+        {prompts.map((p) => (
+          <li>
+            <a href={`/prompts/${p.id}/`}>
+              <div class="stack-card-top">
+                <strong>{p.data.title}</strong>
+                <span class="badge">{p.data.category}</span>
+              </div>
+              <span>{p.data.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="sub-section" aria-labelledby="cheatsheets-heading">
+      <div class="sub-head">
+        <div>
+          <span class="badge badge-accent">Copy-Ready CLI</span>
+          <h2 id="cheatsheets-heading"><a href="/cheatsheets/">Cheatsheets</a></h2>
+        </div>
+        <a class="view-all" href="/cheatsheets/">View all →</a>
+      </div>
+      <p class="muted">Battle-tested command references for production debugging with one-click copy buttons.</p>
+      <ul class="stack-cards">
+        {cheatsheets.map((c) => (
+          <li>
+            <a href={`/cheatsheets/${c.id}/`}>
+              <div class="stack-card-top">
+                <strong>{c.data.title}</strong>
+                <span class="badge">CLI Reference</span>
+              </div>
+              <span>{c.data.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  </div>
+
+  <section class="open">
+    <div>
+      <span class="badge badge-accent">MIT Licensed · Open Source</span>
+      <h2>Audit every line of code on GitHub</h2>
+      <p>No hidden servers, no server uploads, no dark patterns. Missing a tool or prompt you use every week? Open an issue or send a pull request.</p>
+    </div>
+    <p class="open-links">
+      <a class="btn" href={SITE.repo} rel="noopener">View on GitHub</a>
+      {SITE.support.kofi && <a class="btn ghost" href={SITE.support.kofi} target="_blank" rel="noopener">Support on Ko-fi</a>}
+    </p>
+  </section>
+</Base>
+
+<script>
+  import { redact, MASK_PATTERN } from '../lib/redact';
+  import { copyText } from '../scripts/copy';
+
+  const input = document.getElementById('demo-in') as HTMLTextAreaElement;
+  const out = document.getElementById('demo-out')!;
+  const count = document.getElementById('demo-count')!;
+  const copyBtn = document.getElementById('demo-copy') as HTMLButtonElement;
+  const mSecrets = document.getElementById('demo-m-secrets') as HTMLInputElement;
+  const mIps = document.getElementById('demo-m-ips') as HTMLInputElement;
+  const mIds = document.getElementById('demo-m-ids') as HTMLInputElement;
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  let currentRedacted = '';
+
+  function render(animate = false) {
+    const r = redact(input.value, {
+      secrets: mSecrets.checked,
+      ips: mIps.checked,
+      identifiers: mIds.checked,
+    });
+    currentRedacted = r.text;
+    let i = 0;
+    out.innerHTML = esc(r.text).replace(
+      MASK_PATTERN,
+      (m) => `<mark class="mask${animate ? ' reveal' : ''}" style="--i:${i++}">${m}</mark>`,
+    );
+    count.textContent = r.count ? `${r.count} values masked` : 'Nothing to mask';
+  }
+
+  input.addEventListener('input', () => render());
+  [mSecrets, mIps, mIds].forEach((el) => el.addEventListener('change', () => render()));
+  copyBtn.addEventListener('click', () => copyText(copyBtn, currentRedacted, out));
+  render(true);
+
+  const tabBtns = document.querySelectorAll<HTMLButtonElement>('[data-group-filter]');
+  const cards = document.querySelectorAll<HTMLElement>('#home-tool-grid [data-group]');
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.groupFilter!;
+      tabBtns.forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-selected', String(active));
+      });
+      cards.forEach((card) => {
+        card.hidden = target !== 'all' && card.dataset.group !== target;
+      });
+    });
+  });
+</script>
+
+<style>
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 2.75rem;
+    align-items: center;
+    padding-block: 1rem 3rem;
+  }
+
+  .hero-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-code);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--ok);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+    padding: 0.28rem 0.75rem;
+    border-radius: 999px;
+    margin-bottom: 1.1rem;
+  }
+
+  .pill-dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 1.4rem + 2.5vw, 3.1rem);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 1rem;
+  }
+
+  .text-highlight {
+    color: var(--mask);
+  }
+
+  .sub {
+    font-size: 1.12rem;
+    color: var(--ink-soft);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 1rem;
+  }
+
+  .quick-label {
+    font-family: var(--font-code);
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    margin-right: 0.2rem;
+  }
+
+  .quick-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    text-decoration: none;
+    transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+  }
+
+  .quick-chip:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    text-decoration: none;
+  }
+
+  /* Interactive Demo Workbench Window */
+  .demo {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-l);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .demo-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .win-dots {
+    display: inline-flex;
+    gap: 0.38rem;
+  }
+
+  .win-dots span {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 50%;
+    background: var(--line-strong);
+  }
+
+  .win-dots span:nth-child(1) { background: #ef4444; opacity: 0.8; }
+  .win-dots span:nth-child(2) { background: #f59e0b; opacity: 0.8; }
+  .win-dots span:nth-child(3) { background: #22c55e; opacity: 0.8; }
+
+  .demo-bar h2 {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  .demo-body {
+    padding: 1rem 1.15rem 1.15rem;
+  }
+
+  .demo-pane-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .demo-pane-head label {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+
+  .demo-toggles {
+    display: inline-flex;
+    gap: 0.65rem;
+  }
+
+  .mini-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: var(--font-code);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .demo textarea {
+    min-height: 6.75rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    background: var(--bg-subtle);
+  }
+
+  .demo-out-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0.85rem 0 0.4rem;
+  }
+
+  .demo-label {
+    margin: 0;
+    font-family: var(--font-code);
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--ink);
+  }
+
+  .demo .out {
+    font-size: 0.78rem;
+    background: var(--bg-subtle);
+    line-height: 1.65;
+  }
+
+  .demo-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .demo-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: var(--font-code);
+    font-size: 0.83rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .demo-secondary {
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+
+  .demo-secondary:hover {
+    color: var(--ink);
+  }
+
+  /* Orchestrated mask reveal motion */
+  .demo :global(mark.reveal) {
+    animation: cover 380ms cubic-bezier(.2, .7, .2, 1) both;
+    animation-delay: calc(350ms + var(--i) * 140ms);
+    transform-origin: left center;
+  }
+
+  @keyframes cover {
+    from { transform: scaleX(0); opacity: 0.3; }
+    to { transform: scaleX(1); opacity: 1; }
+  }
+
+  .demo :global(mark) {
+    display: inline-block;
+  }
+
+  /* Trust Strip */
+  .trust-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.15rem;
+    margin-bottom: 3.25rem;
+  }
+
+  .trust-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    padding: 1.05rem 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .trust-icon {
+    flex-shrink: 0;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: var(--radius-m);
+    background: var(--accent-soft);
+    color: var(--ok);
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
+  }
+
+  .trust-card h3 {
+    font-size: 0.95rem;
+    margin: 0 0 0.25rem;
+  }
+
+  .trust-card p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+
+  /* Directory Section & Category Filter Tabs */
+  .directory-section {
+    border-top: 1px solid var(--line);
+    padding-top: 2.75rem;
+  }
+
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-head h2 {
+    margin-bottom: 0.25rem;
+  }
+
+  .section-head h2 a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .section-head h2 a:hover {
+    color: var(--accent);
+  }
+
+  .section-head p {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .group-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-code);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.38rem 0.75rem;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+
+  .tab-btn:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+    background: var(--surface-2);
+  }
+
+  .tab-btn.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  .tab-count {
+    font-size: 0.72rem;
+    opacity: 0.85;
+  }
+
+  .tool-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    gap: 1rem;
+  }
+
+  .tool-card[hidden] {
+    display: none;
+  }
+
+  .tool-card a {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1.1rem 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    color: var(--ink);
+    text-decoration: none;
+    transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tool-card a:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-md);
+    text-decoration: none;
+  }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.65rem;
+  }
+
+  .card-arrow {
+    font-family: var(--font-code);
+    color: var(--ink-muted);
+    transition: transform 160ms ease, color 160ms ease;
+  }
+
+  .tool-card a:hover .card-arrow {
+    transform: translateX(3px);
+    color: var(--accent);
+  }
+
+  .tool-card h3 {
+    font-size: 0.98rem;
+    margin: 0 0 0.4rem;
+    color: var(--ink);
+  }
+
+  .tool-card p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+
+  /* Dual Sections: Prompts & Cheatsheets */
+  .dual-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+    margin-top: 3.25rem;
+    padding-top: 2.75rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .sub-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 0.4rem;
+  }
+
+  .sub-head h2 {
+    margin: 0.35rem 0 0;
+  }
+
+  .sub-head h2 a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .view-all {
+    font-family: var(--font-code);
+    font-size: 0.84rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .stack-cards {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .stack-cards li a {
+    display: block;
+    padding: 0.95rem 1.15rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  }
+
+  .stack-cards li a:hover {
+    border-color: var(--accent);
+    background: var(--surface-2);
+    transform: translateY(-1px);
+  }
+
+  .stack-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .stack-card-top strong {
+    font-family: var(--font-code);
+    font-size: 0.95rem;
+  }
+
+  .stack-cards li span:not(.badge) {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+
+  /* Open Source Banner */
+  .open {
+    margin-top: 3.5rem;
+    padding: 1.75rem 2rem;
+    border-radius: var(--radius-l);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.25rem 2rem;
+  }
+
+  .open h2 {
+    font-size: 1.35rem;
+    margin: 0.45rem 0 0.35rem;
+  }
+
+  .open p {
+    margin: 0;
+    color: var(--ink-soft);
+  }
+
+  .open-links {
+    display: flex;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 1024px) {
+    .hero {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+    .trust-strip {
+      grid-template-columns: 1fr;
+    }
+    .dual-sections {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

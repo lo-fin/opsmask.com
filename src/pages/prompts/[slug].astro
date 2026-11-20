@@ -1,0 +1,338 @@
+---
+import Base from '../../layouts/Base.astro';
+import AdSlot from '../../components/AdSlot.astro';
+import { getCollection } from 'astro:content';
+import { toolBySlug } from '../../data/tools';
+import { SITE, repoEditUrl } from '../../config';
+
+export async function getStaticPaths() {
+  const items = await getCollection('prompts');
+  return items.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+const { entry } = Astro.props;
+const { variables, relatedTools, whenToUse, tips } = entry.data;
+const template = (entry.body ?? '').trim();
+const initialPreview = template
+  .replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}\n?/g, (_m, _name, inner) => inner)
+  .replace(/\{\{(\w+)\}\}/g, (_m, name) => `<${name}>`)
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+const payload = JSON.stringify({ template, variables }).replace(/</g, '\\u003c');
+const tools = relatedTools.map(toolBySlug).filter(Boolean);
+---
+<Base title={entry.data.title} description={entry.data.description} wide>
+  <header class="prompt-header">
+    <div class="crumbs-row">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/prompts/">Prompts</a>
+        <span aria-hidden="true">/</span>
+        <span>{entry.data.category}</span>
+      </nav>
+      <span class="badge badge-mask">Automatic Secret Redaction</span>
+    </div>
+    <h1>{entry.data.title}</h1>
+    <p class="lede">{entry.data.description}</p>
+  </header>
+
+  <div class="grid">
+    <form class="fields workbench-card" id="prompt-form" onsubmit="return false">
+      {variables.map((v) => (
+        <div class="field">
+          <label for={`v-${v.name}`}>{v.label}{v.optional && <span class="opt"> (optional)</span>}</label>
+          {v.multiline
+            ? <textarea id={`v-${v.name}`} name={v.name} class="code" placeholder={v.placeholder} spellcheck="false"></textarea>
+            : <input id={`v-${v.name}`} name={v.name} type="text" placeholder={v.placeholder} />}
+        </div>
+      ))}
+      <fieldset class="masking">
+        <legend>Mask before copying</legend>
+        <div class="mask-checks">
+          <label class="check"><input type="checkbox" name="m-secrets" checked /> Passwords, tokens, keys</label>
+          <label class="check"><input type="checkbox" name="m-ips" checked /> IP addresses</label>
+          <label class="check"><input type="checkbox" name="m-ids" /> Emails and GUIDs</label>
+        </div>
+      </fieldset>
+    </form>
+
+    <section class="preview workbench-card" aria-labelledby="preview-title">
+      <div class="preview-head">
+        <h2 id="preview-title">Prompt preview</h2>
+        <span id="mask-count" class="badge badge-mask" aria-live="polite"></span>
+      </div>
+      <pre class="out" id="preview">{initialPreview}</pre>
+      <div class="actions">
+        <button class="btn" type="button" id="copy">Copy prompt</button>
+        <span id="copy-status" class="muted" aria-live="polite"></span>
+      </div>
+      <p class="muted small">Masking catches common patterns, not everything. Read the preview before you send it.</p>
+    </section>
+  </div>
+
+  <section class="prompt-guide prose">
+    <h2>How to use this prompt effectively</h2>
+    <p>{whenToUse ?? `Use this structured ${entry.data.category.toLowerCase()} prompt when you want an AI assistant (ChatGPT, Claude, or GitHub Copilot) to produce grounded, evidence-based recommendations instead of generic guesses. By separating context, raw evidence, and a strict output format, you reduce hallucinated flags and speed up triage.`}</p>
+
+    <h3>What to fill in before copying</h3>
+    <ul>
+      {variables.map((v) => (
+        <li>
+          <strong>{v.label}{v.optional ? ' (optional)' : ''}:</strong>
+          {v.placeholder ? <> Example input: <code>{v.placeholder}</code>.</> : ' Provide concise, relevant context from your environment.'}
+        </li>
+      ))}
+    </ul>
+
+    {tips.length > 0 && (
+      <>
+        <h3>Best practices for accurate answers</h3>
+        <ul>
+          {tips.map((tip) => (
+            <li>{tip}</li>
+          ))}
+        </ul>
+      </>
+    )}
+
+    <h3>How automatic secret redaction protects your data</h3>
+    <p>Everything you paste into the fields above is processed locally inside your browser tab—nothing is sent to OpsMask servers. Before you click <strong>Copy prompt</strong>, the built-in redactor scans for passwords, API tokens, JWTs, private keys, database connection strings, IP addresses, and optional identifiers (emails and GUIDs) and replaces them with deterministic placeholders. Because custom internal naming schemes can vary, always scan the highlighted preview one final time before sending it to an external LLM.</p>
+  </section>
+
+  {tools.length > 0 && (
+    <section class="related">
+      <div class="related-head">
+        <span class="badge badge-accent">Local Verification</span>
+        <h2>Check it locally first</h2>
+      </div>
+      <ul>
+        {tools.map((t) => (
+          <li><a href={`/tools/${t!.slug}/`}>{t!.title} →</a></li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  <p class="edit"><a href={repoEditUrl(entry.filePath)} rel="noopener">Improve this prompt on GitHub</a></p>
+  <AdSlot />
+  <script type="application/json" id="prompt-data" set:html={payload}></script>
+  <div id="support-cfg" data-kofi={SITE.support.kofi} hidden></div>
+</Base>
+
+<script>
+  import { redact, MASK_PATTERN } from '../../lib/redact';
+  import { supportNudge } from '../../scripts/support';
+
+  type Var = { name: string; label: string; optional: boolean };
+  const data = JSON.parse(document.getElementById('prompt-data')!.textContent!) as { template: string; variables: Var[] };
+  const form = document.getElementById('prompt-form') as HTMLFormElement;
+  const preview = document.getElementById('preview')!;
+  const countEl = document.getElementById('mask-count')!;
+  let finalText = '';
+
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+  function fill(values: Record<string, string>) {
+    // {{#name}} ... {{/name}} blocks are dropped when the value is empty
+    let out = data.template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}\n?/g, (_m, name, inner) => (values[name]?.trim() ? inner : ''));
+    out = out.replace(/\{\{(\w+)\}\}/g, (_m, name) => values[name]?.trim() || `<${name}>`);
+    return out.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function update() {
+    const fd = new FormData(form);
+    const values: Record<string, string> = {};
+    for (const v of data.variables) values[v.name] = String(fd.get(v.name) ?? '');
+    const filled = fill(values);
+    const { text, count } = redact(filled, {
+      secrets: fd.has('m-secrets'),
+      ips: fd.has('m-ips'),
+      identifiers: fd.has('m-ids'),
+    });
+    finalText = text;
+    preview.innerHTML = esc(text).replace(MASK_PATTERN, (m) => `<mark class="mask">${m}</mark>`);
+    countEl.textContent = count ? `${count} value${count > 1 ? 's' : ''} masked` : 'Ready';
+  }
+
+  form.addEventListener('input', update);
+  update();
+
+  document.getElementById('copy')!.addEventListener('click', async () => {
+    const status = document.getElementById('copy-status')!;
+    try {
+      await navigator.clipboard.writeText(finalText);
+      status.textContent = 'Copied. Paste it into your AI chat.';
+      supportNudge(document.querySelector('.preview')!, document.getElementById('support-cfg')!.dataset.kofi ?? '');
+    } catch {
+      status.textContent = 'Copy failed. Select the preview and press Ctrl+C.';
+    }
+  });
+</script>
+
+<style>
+  .prompt-header {
+    margin-bottom: 1.5rem;
+  }
+  .crumbs-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+  }
+  .crumbs {
+    color: var(--ink-soft);
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    display: inline-flex;
+    gap: 0.4rem;
+  }
+  .crumbs a {
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .crumbs a:hover {
+    color: var(--accent);
+  }
+  .lede {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .workbench-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    padding: 1.35rem;
+    box-shadow: var(--shadow-md);
+  }
+  .fields {
+    display: grid;
+    gap: 1.1rem;
+  }
+  .opt {
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
+  .masking {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 0.85rem 1rem;
+    background: var(--bg-subtle);
+  }
+  .masking legend {
+    font-family: var(--font-code);
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding-inline: 0.4rem;
+    color: var(--mask);
+  }
+  .mask-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+  .preview {
+    position: sticky;
+    top: calc(var(--header-height) + 1rem);
+  }
+  .preview-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .preview-head h2 {
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .preview .out {
+    max-height: 58vh;
+    overflow-y: auto;
+  }
+  .actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 0.9rem;
+  }
+  .small {
+    font-size: 0.85rem;
+    margin: 0.65rem 0 0;
+  }
+  .related {
+    margin-top: 2.25rem;
+    padding: 1.1rem 1.35rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-m);
+  }
+  .related-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.65rem;
+  }
+  .related h2 {
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .related ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .related li a {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .related li a:hover {
+    border-color: var(--accent);
+  }
+  .prompt-guide {
+    margin-top: 2rem;
+    padding: 1.5rem 1.75rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-sm);
+    max-width: 60rem;
+  }
+  .prompt-guide h2 {
+    margin-top: 0;
+  }
+  .edit {
+    margin-top: 2rem;
+    font-family: var(--font-code);
+    font-size: 0.84rem;
+  }
+  .edit a {
+    color: var(--ink-soft);
+  }
+  @media (max-width: 960px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+    .preview {
+      position: static;
+    }
+  }
+</style>

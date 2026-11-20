@@ -1,0 +1,40 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Page Not Found" description="The page you were looking for could not be found.">
+  <div class="not-found">
+    <span class="badge badge-mask">HTTP 404</span>
+    <h1>Route Not Found</h1>
+    <p class="muted">The tool, cheatsheet or prompt you requested does not exist or has moved.</p>
+    <div class="actions">
+      <a class="btn" href="/">Back to Workbench</a>
+      <a class="btn ghost" href="/tools/">Browse All Tools</a>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .not-found {
+    max-width: 34rem;
+    margin: 3rem auto;
+    text-align: center;
+    padding: 2.5rem 2rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-md);
+  }
+  .not-found h1 {
+    font-size: 2.25rem;
+    margin: 0.6rem 0 0.5rem;
+  }
+  .not-found p {
+    margin: 0 auto 1.5rem;
+  }
+  .actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+</style>

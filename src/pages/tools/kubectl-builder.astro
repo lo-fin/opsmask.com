@@ -1,0 +1,271 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+---
+<ToolShell slug="kubectl-builder">
+  <div class="top">
+    <div>
+      <label for="action">I want to</label>
+      <select id="action"></select>
+    </div>
+    <div><label for="ns">Namespace</label><input id="ns" type="text" class="code" placeholder="current" /></div>
+    <div><label for="ctx">Context</label><input id="ctx" type="text" class="code" placeholder="current" /></div>
+  </div>
+  <div id="fields" class="fields"></div>
+  <div>
+    <div class="row"><label for="cmd">Command</label><button class="btn ghost" type="button" id="copy">Copy</button></div>
+    <pre id="cmd" class="out cmd"></pre>
+    <p id="warn" class="status-warn" aria-live="polite"></p>
+    <ul id="explain" class="explain"></ul>
+  </div>
+
+  <div slot="notes" class="prose">
+    <h2>Habits that save time</h2>
+    <ul>
+      <li>Always pass <code>--context</code> in scripts and runbooks. The current context is the most common cause of “I ran it against prod”.</li>
+      <li><code>kubectl logs deploy/api</code> picks one pod. Use <code>-l app=api --prefix</code> to see all of them.</li>
+      <li><code>--previous</code> shows the logs of the container that crashed, which is what you need for CrashLoopBackOff.</li>
+      <li><code>kubectl debug</code> adds a throwaway container with tools to a running pod, so distroless images stay distroless.</li>
+    </ul>
+  </div>
+</ToolShell>
+
+<script>
+  import { copyText } from '../../scripts/copy';
+  type Field = { id: string; label: string; type?: 'text' | 'select' | 'check'; options?: string[]; value?: string | boolean; placeholder?: string };
+  type V = Record<string, any>;
+  type Out = { args: string[]; explain: [string, string][]; warn?: string };
+  type Action = { label: string; fields: Field[]; build: (v: V) => Out; allNs?: boolean };
+
+  const q = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+  const RES = ['pods', 'deployments', 'statefulsets', 'daemonsets', 'services', 'ingresses', 'configmaps', 'secrets', 'jobs', 'cronjobs', 'pvc', 'nodes', 'events', 'hpa', 'networkpolicies', 'all'];
+  const WORKLOAD = ['deployment', 'statefulset', 'daemonset'];
+
+  const ACTIONS: Record<string, Action> = {
+    get: {
+      label: 'List or get resources', allNs: true,
+      fields: [
+        { id: 'res', label: 'Resource', type: 'select', options: RES },
+        { id: 'name', label: 'Name', placeholder: 'all' },
+        { id: 'sel', label: 'Label selector (-l)', placeholder: 'app=api' },
+        { id: 'out', label: 'Output', type: 'select', options: ['table', 'wide', 'yaml', 'json', 'name', 'show-labels'] },
+        { id: 'watch', label: 'Watch for changes', type: 'check' },
+      ],
+      build: (v) => {
+        const a = ['get', v.res], e: [string, string][] = [];
+        if (v.name) a.push(v.name);
+        if (v.sel) { a.push('-l', q(v.sel)); e.push(['-l', 'only objects whose labels match the selector']); }
+        if (v.out === 'show-labels') { a.push('--show-labels'); e.push(['--show-labels', 'adds a LABELS column']); }
+        else if (v.out !== 'table') { a.push('-o', v.out); e.push([`-o ${v.out}`, v.out === 'wide' ? 'extra columns such as node and pod IP' : `prints as ${v.out}`]); }
+        if (v.res === 'events') { a.push('--sort-by=.lastTimestamp'); e.push(['--sort-by', 'events are not sorted by time by default']); }
+        if (v.watch) { a.push('-w'); e.push(['-w', 'keeps running and prints changes']); }
+        return { args: a, explain: e, warn: v.res === 'secrets' && ['yaml', 'json'].includes(v.out) ? 'This prints Secret values (Base64). Do not paste the output anywhere public.' : undefined };
+      },
+    },
+    describe: {
+      label: 'Describe a resource (events, conditions)',
+      fields: [{ id: 'res', label: 'Resource', type: 'select', options: RES.filter((r) => r !== 'all' && r !== 'events') }, { id: 'name', label: 'Name', placeholder: 'api-7d9c8b6f5-2kq9x' }],
+      build: (v) => ({ args: ['describe', v.res, ...(v.name ? [v.name] : [])], explain: [['describe', 'human-readable details plus recent events, the first place to look when a pod is Pending or failing']] }),
+    },
+    logs: {
+      label: 'Read logs',
+      fields: [
+        { id: 'target', label: 'Pod, deploy/name or empty for selector', placeholder: 'deploy/api' },
+        { id: 'sel', label: 'Label selector (-l)', placeholder: 'app=api' },
+        { id: 'container', label: 'Container (-c)', placeholder: 'default' },
+        { id: 'tail', label: 'Last N lines', value: '200' },
+        { id: 'since', label: 'Since', placeholder: '10m, 1h' },
+        { id: 'follow', label: 'Follow (-f)', type: 'check', value: true },
+        { id: 'previous', label: 'Previous (crashed) container', type: 'check' },
+        { id: 'all', label: 'All containers', type: 'check' },
+        { id: 'ts', label: 'Timestamps', type: 'check' },
+      ],
+      build: (v) => {
+        const a = ['logs'], e: [string, string][] = [];
+        if (v.target) a.push(v.target);
+        if (v.sel) { a.push('-l', q(v.sel), '--prefix', '--max-log-requests=10'); e.push(['-l … --prefix', 'logs from every matching pod, each line prefixed with its pod']); }
+        if (!v.target && !v.sel) return { args: a, explain: e, warn: 'Enter a pod name, deploy/name or a label selector.' };
+        if (v.target?.startsWith('deploy') && !v.sel) e.push(['deploy/…', 'picks one pod of the Deployment, not all of them']);
+        if (v.container) a.push('-c', v.container);
+        if (v.all) { a.push('--all-containers'); e.push(['--all-containers', 'includes sidecars and init containers']); }
+        if (v.tail) { a.push(`--tail=${v.tail}`); e.push(['--tail', 'start with the last lines instead of the whole log']); }
+        if (v.since) a.push(`--since=${v.since}`);
+        if (v.previous) { a.push('--previous'); e.push(['--previous', 'logs of the last terminated container, for CrashLoopBackOff']); }
+        if (v.follow && !v.previous) { a.push('-f'); e.push(['-f', 'stream new lines until Ctrl+C']); }
+        if (v.ts) a.push('--timestamps');
+        return { args: a, explain: e };
+      },
+    },
+    exec: {
+      label: 'Open a shell in a pod',
+      fields: [
+        { id: 'target', label: 'Pod or deploy/name', placeholder: 'deploy/api' },
+        { id: 'container', label: 'Container (-c)', placeholder: 'default' },
+        { id: 'cmd', label: 'Command', value: 'sh' },
+      ],
+      build: (v) => ({
+        args: ['exec', '-it', v.target || '<pod>', ...(v.container ? ['-c', v.container] : []), '--', ...String(v.cmd || 'sh').split(/\s+/)],
+        explain: [['-it', 'interactive terminal'], ['--', 'everything after this is the command to run in the container']],
+        warn: v.cmd === 'bash' ? 'Many images have no bash. Use sh, or kubectl debug if there is no shell at all.' : undefined,
+      }),
+    },
+    pf: {
+      label: 'Port-forward to my machine',
+      fields: [
+        { id: 'target', label: 'Target', value: 'svc/api' },
+        { id: 'local', label: 'Local port', value: '8080' },
+        { id: 'remote', label: 'Remote port', value: '80' },
+        { id: 'any', label: 'Listen on all interfaces', type: 'check' },
+      ],
+      build: (v) => ({
+        args: ['port-forward', v.target || '<target>', `${v.local}:${v.remote}`, ...(v.any ? ['--address', '0.0.0.0'] : [])],
+        explain: [[`${v.local}:${v.remote}`, `localhost:${v.local} on your machine goes to port ${v.remote} of the target`], ['svc/…', 'a Service picks one backing pod and stays on it']],
+        warn: v.any ? 'Listening on 0.0.0.0 exposes the port to your network.' : undefined,
+      }),
+    },
+    rollout: {
+      label: 'Restart, check or roll back a rollout',
+      fields: [
+        { id: 'sub', label: 'Action', type: 'select', options: ['restart', 'status', 'history', 'undo', 'pause', 'resume'] },
+        { id: 'kind', label: 'Kind', type: 'select', options: WORKLOAD },
+        { id: 'name', label: 'Name', value: 'api' },
+        { id: 'rev', label: 'To revision (undo)', placeholder: 'previous' },
+      ],
+      build: (v) => {
+        const a = ['rollout', v.sub, `${v.kind}/${v.name || '<name>'}`];
+        if (v.sub === 'undo' && v.rev) a.push(`--to-revision=${v.rev}`);
+        const ex: Record<string, string> = {
+          restart: 'replaces pods one by one using the rollout strategy, no downtime if replicas > 1',
+          status: 'waits until the rollout finishes or fails, useful in CI',
+          history: 'lists revisions; add --revision=N to see one',
+          undo: 'goes back to the previous revision (or --to-revision)',
+          pause: 'stops a rollout so you can make several changes',
+          resume: 'continues a paused rollout',
+        };
+        return { args: a, explain: [[v.sub, ex[v.sub]]], warn: v.sub === 'undo' ? 'If the Deployment is managed by Argo CD, Flux or Helm, they will roll it forward again. Revert in Git instead.' : undefined };
+      },
+    },
+    scale: {
+      label: 'Scale replicas',
+      fields: [{ id: 'kind', label: 'Kind', type: 'select', options: ['deployment', 'statefulset'] }, { id: 'name', label: 'Name', value: 'api' }, { id: 'n', label: 'Replicas', value: '3' }],
+      build: (v) => ({ args: ['scale', `${v.kind}/${v.name || '<name>'}`, `--replicas=${v.n}`], explain: [['scale', 'sets spec.replicas directly']], warn: 'An HPA or GitOps tool will override a manual scale.' }),
+    },
+    top: {
+      label: 'See CPU and memory usage', allNs: true,
+      fields: [
+        { id: 'what', label: 'Of', type: 'select', options: ['pods', 'nodes'] },
+        { id: 'sel', label: 'Label selector (-l)', placeholder: 'app=api' },
+        { id: 'sort', label: 'Sort by', type: 'select', options: ['memory', 'cpu'] },
+        { id: 'containers', label: 'Per container', type: 'check' },
+      ],
+      build: (v) => ({
+        args: ['top', v.what, ...(v.sel ? ['-l', q(v.sel)] : []), `--sort-by=${v.sort}`, ...(v.containers && v.what === 'pods' ? ['--containers'] : [])],
+        explain: [['top', 'current usage from metrics-server, not requests or limits']],
+      }),
+    },
+    debug: {
+      label: 'Debug a pod or node with a tools container',
+      fields: [
+        { id: 'target', label: 'Pod or node/name', placeholder: 'api-7d9c8b6f5-2kq9x' },
+        { id: 'image', label: 'Image', type: 'select', options: ['nicolaka/netshoot', 'busybox', 'ubuntu'] },
+        { id: 'tc', label: 'Share process namespace with container', placeholder: 'api' },
+      ],
+      build: (v) => {
+        const node = String(v.target).startsWith('node/');
+        return {
+          args: ['debug', '-it', v.target || '<pod>', `--image=${v.image}`, ...(v.tc && !node ? [`--target=${v.tc}`] : []), ...(node ? ['--profile=sysadmin'] : [])],
+          explain: node
+            ? [['node/…', 'starts a pod on that node with the host filesystem at /host'], ['--profile=sysadmin', 'privileged, needed for most node troubleshooting']]
+            : [['debug', 'adds an ephemeral container to the running pod; it shares the network, so curl localhost works'], ['--target', 'also see the processes of that container (ps, /proc)']],
+          warn: node ? 'Delete the debug pod afterwards: kubectl get pods | grep node-debugger' : undefined,
+        };
+      },
+    },
+    events: {
+      label: 'See recent events', allNs: true,
+      fields: [{ id: 'for', label: 'For object', placeholder: 'pod/api-7d9c8b6f5-2kq9x' }, { id: 'warn', label: 'Warnings only', type: 'check', value: true }],
+      build: (v) => ({
+        args: ['events', ...(v.for ? [`--for=${v.for}`] : []), ...(v.warn ? ['--types=Warning'] : [])],
+        explain: [['kubectl events', 'sorted by time (kubectl 1.26+); on older clients use get events --sort-by=.lastTimestamp']],
+      }),
+    },
+    cani: {
+      label: 'Check permissions (auth can-i)',
+      fields: [
+        { id: 'verb', label: 'Verb', type: 'select', options: ['get', 'list', 'create', 'update', 'patch', 'delete', '*', '--list'] },
+        { id: 'res', label: 'Resource', value: 'pods' },
+        { id: 'as', label: 'As user or service account', placeholder: 'system:serviceaccount:ci:deployer' },
+      ],
+      build: (v) => ({
+        args: ['auth', 'can-i', ...(v.verb === '--list' ? ['--list'] : [v.verb, v.res]), ...(v.as ? [`--as=${q(v.as)}`] : [])],
+        explain: [['--as', 'impersonates someone else; you need impersonate permission'], ...(v.verb === '--list' ? [['--list', 'everything you can do in the namespace']] as [string, string][] : [])],
+      }),
+    },
+    delpod: {
+      label: 'Delete a stuck pod',
+      fields: [{ id: 'name', label: 'Pod', placeholder: 'api-7d9c8b6f5-2kq9x' }, { id: 'force', label: 'Force (skip graceful shutdown)', type: 'check' }],
+      build: (v) => ({
+        args: ['delete', 'pod', v.name || '<pod>', ...(v.force ? ['--grace-period=0', '--force'] : [])],
+        explain: [['delete pod', 'the owning ReplicaSet or StatefulSet creates a replacement'], ...(v.force ? [['--force', 'removes the object from the API without waiting for the kubelet']] as [string, string][] : [])],
+        warn: v.force ? 'Forcing a StatefulSet pod can run two copies at once if the node is only unreachable, not dead.' : undefined,
+      }),
+    },
+  };
+
+  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
+  const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const action = $<HTMLSelectElement>('action');
+  action.innerHTML = Object.entries(ACTIONS).map(([k, a]) => `<option value="${k}">${esc(a.label)}</option>`).join('');
+
+  function renderFields() {
+    const a = ACTIONS[action.value];
+    const fields = [...a.fields, ...(a.allNs ? [{ id: 'allns', label: 'All namespaces (-A)', type: 'check' } as Field] : [])];
+    $('fields').innerHTML = fields.map((f) => {
+      const id = `f-${f.id}`;
+      if (f.type === 'check') return `<label class="check"><input type="checkbox" id="${id}" ${f.value ? 'checked' : ''} /> ${esc(f.label)}</label>`;
+      if (f.type === 'select') return `<div><label for="${id}">${esc(f.label)}</label><select id="${id}">${f.options!.map((o) => `<option>${esc(o)}</option>`).join('')}</select></div>`;
+      return `<div><label for="${id}">${esc(f.label)}</label><input id="${id}" type="text" class="code" value="${esc(String(f.value ?? ''))}" placeholder="${esc(f.placeholder ?? '')}" /></div>`;
+    }).join('');
+    build();
+  }
+
+  function build() {
+    const a = ACTIONS[action.value];
+    const v: V = {};
+    $('fields').querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach((el) => {
+      v[el.id.slice(2)] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value.trim();
+    });
+    const out = a.build(v);
+    const ns = $('ns').value.trim(), ctx = $('ctx').value.trim();
+    const scope = v.allns ? ['-A'] : ns ? ['-n', q(ns)] : [];
+    const cmd = ['kubectl', ...(ctx ? ['--context', q(ctx)] : []), ...scope, ...out.args].join(' ');
+    $('cmd').textContent = cmd;
+    $('warn').textContent = out.warn ?? '';
+    const ex = [...out.explain];
+    if (v.allns) ex.push(['-A', 'every namespace; adds a NAMESPACE column']);
+    if (ctx) ex.push(['--context', 'runs against that cluster regardless of the current context']);
+    $('explain').innerHTML = ex.map(([k, d]) => `<li><code>${esc(k)}</code> ${esc(d)}</li>`).join('');
+  }
+
+  action.addEventListener('change', renderFields);
+  $('fields').addEventListener('input', build);
+  $('fields').addEventListener('change', build);
+  $('ns').addEventListener('input', build);
+  $('ctx').addEventListener('input', build);
+  $('copy').addEventListener('click', () => copyText($('copy'), $('cmd').textContent ?? '', $('cmd')));
+  renderFields();
+</script>
+
+<style>
+  .top { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; }
+  .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem 1rem; align-items: end; }
+  .fields :global(label) { font-size: 0.9rem; }
+  .fields :global(.check) { padding-bottom: 0.6rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .cmd { font-size: 0.95rem; }
+  #warn { margin: 0.5rem 0 0; }
+  #warn:empty { display: none; }
+  .explain { margin: 0.5rem 0 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: 0.95rem; }
+  @media (max-width: 760px) { .top, .fields { grid-template-columns: 1fr; } }
+</style>

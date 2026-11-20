@@ -1,0 +1,129 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const guides = (await getCollection('guides')).sort((a, b) =>
+  b.data.published.localeCompare(a.data.published),
+);
+const categories = [...new Set(guides.map((g) => g.data.category))];
+---
+<Base
+  title="DevOps & Kubernetes Engineering Guides"
+  description="In-depth, production-tested guides on Kubernetes debugging, secret hygiene, RBAC, NetworkPolicies, cloud CIDR planning, and SRE workflows."
+  wide
+>
+  <header class="page-head">
+    <span class="badge badge-accent">Original Engineering Guides</span>
+    <h1>DevOps &amp; Kubernetes Guides</h1>
+    <p class="lede">
+      Practical, production-tested playbooks covering Kubernetes troubleshooting, secret redaction before using AI assistants, capacity planning, cloud networking, and security hardening. Every guide pairs directly with local browser utilities you can run without uploading sensitive configs.
+    </p>
+    <div class="cat-pills">
+      {categories.map((cat) => (
+        <span class="badge">{cat}</span>
+      ))}
+    </div>
+  </header>
+
+  <ul class="guide-grid">
+    {guides.map((g) => (
+      <li class="guide-card">
+        <a href={`/guides/${g.id}/`}>
+          <div class="guide-meta">
+            <span class="badge badge-accent">{g.data.category}</span>
+            <span class="meta-text">{g.data.readingTime} · {g.data.published}</span>
+          </div>
+          <h2>{g.data.title}</h2>
+          <p>{g.data.description}</p>
+          <div class="guide-tags">
+            {g.data.tags.slice(0, 4).map((t) => (
+              <span class="tag">#{t}</span>
+            ))}
+          </div>
+        </a>
+      </li>
+    ))}
+  </ul>
+</Base>
+
+<style>
+  .page-head {
+    max-width: 52rem;
+    margin-bottom: 2.25rem;
+  }
+  .page-head h1 {
+    margin: 0.5rem 0 0.65rem;
+  }
+  .lede {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    line-height: 1.65;
+  }
+  .cat-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 1rem;
+  }
+  .guide-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+    gap: 1.25rem;
+  }
+  .guide-card a {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1.35rem 1.45rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    color: var(--ink);
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+  .guide-card a:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-md);
+    text-decoration: none;
+  }
+  .guide-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .meta-text {
+    font-family: var(--font-code);
+    font-size: 0.76rem;
+    color: var(--ink-muted);
+  }
+  .guide-card h2 {
+    font-size: 1.15rem;
+    line-height: 1.35;
+    margin: 0 0 0.55rem;
+    color: var(--ink);
+  }
+  .guide-card p {
+    margin: 0 0 1rem;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    flex: 1;
+  }
+  .guide-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    font-family: var(--font-code);
+    font-size: 0.75rem;
+    color: var(--ink-muted);
+  }
+</style>

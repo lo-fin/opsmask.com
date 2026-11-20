@@ -1,0 +1,652 @@
+---
+import '@fontsource/atkinson-hyperlegible/latin-400.css';
+import '@fontsource/atkinson-hyperlegible/latin-700.css';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-600.css';
+import '../styles/global.css';
+import { SITE } from '../config';
+import SearchBox from '../components/SearchBox.astro';
+
+interface Props { title?: string; description?: string; hideHeaderSearch?: boolean; wide?: boolean }
+const { title, description = SITE.tagline, hideHeaderSearch = false, wide = false } = Astro.props;
+const fullTitle = title ? `${title} | ${SITE.name}` : `${SITE.name}: DevOps tools and AI prompts that mask your secrets`;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? SITE.url).href;
+const path = Astro.url.pathname;
+const nav = [
+  { href: '/tools/', label: 'Tools' },
+  { href: '/guides/', label: 'Guides' },
+  { href: '/cheatsheets/', label: 'Cheatsheets' },
+  { href: '/prompts/', label: 'Prompts' },
+  { href: '/about/', label: 'About' },
+];
+const { kofi, githubSponsors } = SITE.support;
+const year = new Date().getFullYear();
+declare const __BUILD_ID__: string;
+const buildId = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
+---
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Primary Meta Tags -->
+    <title>{fullTitle}</title>
+    <meta name="title" content={fullTitle} />
+    <meta name="description" content={description} />
+    <meta name="robots" content={path.startsWith('/404') ? 'noindex, nofollow' : 'index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1'} />
+    <meta name="keywords" content="devops tools, kubernetes validator, jwt decoder, cidr calculator, cron explainer, base64 encoder decoder, redact secrets, promql cheatsheet, kubectl cheatsheet, client side tools, offline developer utilities" />
+    <meta name="author" content={SITE.name} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f1f5f9" media="(prefers-color-scheme: light)" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content={path.startsWith('/cheatsheets/') || path.startsWith('/prompts/') || path.startsWith('/guides/') ? 'article' : 'website'} />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={new URL('/og-image.svg', SITE.url).href} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${SITE.name} - DevOps Tools & AI Prompts`} />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content={canonical} />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={new URL('/og-image.svg', SITE.url).href} />
+    <meta name="twitter:image:alt" content={`${SITE.name} - DevOps Tools & AI Prompts`} />
+
+    <!-- Schema.org Structured Data (JSON-LD) -->
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${SITE.url}/#website`,
+          "url": SITE.url,
+          "name": SITE.name,
+          "description": SITE.tagline,
+          "inLanguage": "en-US",
+          "publisher": {
+            "@type": "Organization",
+            "name": SITE.name,
+            "url": SITE.url,
+            "logo": {
+              "@type": "ImageObject",
+              "url": `${SITE.url}/favicon.svg`
+            }
+          }
+        },
+        {
+          "@type": path.startsWith('/tools/') && path !== '/tools/' ? "WebApplication" : "WebPage",
+          "@id": `${canonical}#webpage`,
+          "url": canonical,
+          "name": fullTitle,
+          "description": description,
+          "isPartOf": {
+            "@id": `${SITE.url}/#website`
+          },
+          ...(path.startsWith('/tools/') && path !== '/tools/' ? {
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "All",
+            "browserRequirements": "Requires JavaScript. Requires HTML5.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          } : {})
+        }
+      ]
+    })} />
+    <script is:inline set:html={`window.__BUILD_ID__ = ${JSON.stringify(buildId)};
+      (function () {
+        try {
+          var prevBuildId = localStorage.getItem('app_build_id');
+          var params = new URLSearchParams(window.location.search);
+          var forceClear = params.get('clear_cache') === '1';
+          if (prevBuildId !== window.__BUILD_ID__ || forceClear) {
+            localStorage.setItem('app_build_id', window.__BUILD_ID__);
+            if ('caches' in window) {
+              caches.keys().then(function (keys) {
+                keys.forEach(function (k) { caches.delete(k); });
+              });
+            }
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                regs.forEach(function (r) { r.unregister(); });
+              });
+            }
+            if (forceClear) {
+              params.delete('clear_cache');
+              var cleanQs = params.toString();
+              window.location.replace(
+                window.location.pathname + (cleanQs ? '?' + cleanQs : '') + window.location.hash
+              );
+              return;
+            }
+          }
+          var t = localStorage.getItem('theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.dataset.theme = t;
+          }
+        } catch (e) {}
+      })();`} />
+    {SITE.ads.provider === 'adsense' && SITE.ads.adsense.clientId && (
+      <>
+        <meta name="google-adsense-account" content={SITE.ads.adsense.clientId} />
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${SITE.ads.adsense.clientId}`}
+          crossorigin="anonymous"
+        ></script>
+      </>
+    )}
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap hbar">
+        <div class="brand-group">
+          <a class="logo" href="/" aria-label={`${SITE.name} home`}>
+            <svg class="logo-shield" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <path d="m9 12 2 2 4-4"></path>
+            </svg>
+            <span>ops</span><span class="bar">mask</span>
+          </a>
+          <span class="local-pill" title="100% Client-Side Execution — CSP Locked">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            LOCAL
+          </span>
+        </div>
+
+        <nav aria-label="Main">
+          {nav.map((n) => (
+            <a href={n.href} aria-current={path.startsWith(n.href) ? 'page' : undefined}>{n.label}</a>
+          ))}
+        </nav>
+
+        {!hideHeaderSearch && (
+          <div class="header-search">
+            <SearchBox id="header-search" placeholder="Search tools, prompts…" />
+          </div>
+        )}
+
+        <div class="right">
+          <a class="icon-btn" href={SITE.repo} rel="noopener" aria-label="Source code on GitHub" title="Source on GitHub">
+            <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.83-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          </a>
+          {kofi && (
+            <a class="support" href={kofi} target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M4 5h13a3 3 0 0 1 0 6h-.3A6 6 0 0 1 11 16H9a6 6 0 0 1-6-6V6a1 1 0 0 1 1-1Zm13 4a1 1 0 0 0 0-2v2ZM3 19h15v2H3z"/></svg>
+              <span>Support</span>
+            </a>
+          )}
+          <button class="icon-btn theme-toggle" type="button" aria-label="Switch light or dark theme" title="Toggle light / dark theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class:list={['wrap', { wide }]}>
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap foot">
+        <div class="col about">
+          <a class="logo" href="/">
+            <svg class="logo-shield" viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <path d="m9 12 2 2 4-4"></path>
+            </svg>
+            <span>ops</span><span class="bar">mask</span>
+          </a>
+          <p>DevOps tools, technical guides, cheatsheets and AI prompts for engineers who run infrastructure. Every tool executes 100% locally in your browser tab—none of your pasted configs, logs or secrets are ever uploaded to our servers.</p>
+          <div class="foot-badges">
+            <span class="badge badge-accent">100% Client-Side Tools</span>
+            <span class="badge">No Server Uploads</span>
+            <span class="badge">MIT Open Source</span>
+          </div>
+        </div>
+        <div class="col">
+          <h2>Resources</h2>
+          <ul>
+            <li><a href="/tools/">All DevOps Tools</a></li>
+            <li><a href="/guides/">Engineering Guides</a></li>
+            <li><a href="/cheatsheets/">CLI Cheatsheets</a></li>
+            <li><a href="/prompts/">Secret-Safe AI Prompts</a></li>
+            <li><a href={SITE.repo} rel="noopener">Source code on GitHub</a></li>
+          </ul>
+        </div>
+        <div class="col">
+          <h2>Company &amp; Legal</h2>
+          <ul>
+            <li><a href="/about/">About OpsMask</a></li>
+            <li><a href="/privacy-policy/">Privacy Policy</a></li>
+            <li><a href="/terms/">Terms of Service</a></li>
+            <li><a href="/contact/">Contact &amp; Support</a></li>
+            {kofi && <li><a href={kofi} target="_blank" rel="noopener">Buy me a coffee on Ko-fi</a></li>}
+            {githubSponsors && <li><a href={githubSponsors} rel="noopener">GitHub Sponsors</a></li>}
+          </ul>
+        </div>
+      </div>
+      <div class="wrap legal">
+        <span>© {year} {SITE.name}. Open-source under the MIT License.</span>
+        <span class="legal-right">Built for SREs, Platform &amp; DevOps Engineers.</span>
+      </div>
+    </footer>
+
+    <script>
+      import { copyText } from '../scripts/copy';
+      const root = document.documentElement;
+      document.querySelector('.theme-toggle')?.addEventListener('click', () => {
+        const current = root.dataset.theme ?? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        const next = current === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('theme', next); } catch {}
+      });
+
+      document.addEventListener('keydown', (e) => {
+        const typing = (e.target as HTMLElement).closest('input, textarea, select, [contenteditable]');
+        if ((e.key === '/' && !typing) || (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey))) {
+          const input = document.querySelector<HTMLInputElement>('#hero-search, #header-search');
+          if (input && input.offsetParent !== null) {
+            e.preventDefault();
+            input.focus();
+            input.select();
+          }
+        }
+      });
+
+      document.querySelectorAll<HTMLPreElement>('.prose pre').forEach((pre) => {
+        const btn = document.createElement('button');
+        btn.className = 'copy-btn';
+        btn.type = 'button';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', () => {
+          const code = pre.querySelector('code') ?? pre;
+          copyText(btn, code.innerText, code);
+        });
+        pre.appendChild(btn);
+      });
+
+      const buildVersion = (window as Window & { __BUILD_ID__?: string }).__BUILD_ID__;
+      if (buildVersion) {
+        document.querySelectorAll<HTMLIFrameElement>('iframe[src^="/"]').forEach((iframe) => {
+          const src = iframe.getAttribute('src');
+          if (src && !src.includes('v=')) {
+            const sep = src.includes('?') ? '&' : '?';
+            iframe.setAttribute('src', `${src}${sep}v=${encodeURIComponent(buildVersion)}`);
+          }
+        });
+      }
+    </script>
+
+    <style>
+      .skip {
+        position: absolute;
+        left: -999px;
+      }
+      .skip:focus {
+        left: 1rem;
+        top: 1rem;
+        z-index: 99;
+        background: var(--surface);
+        color: var(--ink);
+        border: 2px solid var(--accent);
+        border-radius: var(--radius-s);
+        padding: 0.5rem 1rem;
+        font-weight: 700;
+      }
+
+      .site-header {
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 86%, transparent);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        position: sticky;
+        top: 0;
+        z-index: 30;
+      }
+
+      .hbar {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding-block: 0.65rem;
+        flex-wrap: wrap;
+      }
+
+      .brand-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.65rem;
+      }
+
+      .logo-shield {
+        color: var(--accent);
+        flex-shrink: 0;
+      }
+
+      .local-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-family: var(--font-code);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--ok);
+        border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+      }
+
+      .pulse-dot {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 50%;
+        background: var(--ok);
+        box-shadow: 0 0 6px var(--ok);
+      }
+
+      nav {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+
+      nav a {
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-family: var(--font-code);
+        font-size: 0.88rem;
+        font-weight: 600;
+        padding: 0.38rem 0.72rem;
+        border-radius: var(--radius-s);
+        transition: color 150ms ease, background-color 150ms ease;
+      }
+
+      nav a:hover {
+        color: var(--ink);
+        background: var(--surface);
+        text-decoration: none;
+      }
+
+      nav a[aria-current='page'] {
+        color: var(--ink);
+        background: var(--surface-2);
+        box-shadow: inset 0 -2px 0 var(--mask);
+      }
+
+      .header-search {
+        margin-left: auto;
+        width: min(320px, 100%);
+      }
+
+      .header-search :global(input) {
+        padding-block: 0.44rem;
+        font-size: 0.86rem;
+      }
+
+      .right {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+
+      .hbar > nav + .right {
+        margin-left: auto;
+      }
+
+      .icon-btn {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--ink-soft);
+        border-radius: var(--radius-m);
+        width: 2.25rem;
+        height: 2.25rem;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+      }
+
+      .icon-btn:hover {
+        background: var(--surface-2);
+        color: var(--ink);
+        border-color: var(--line-strong);
+      }
+
+      :global(html:not([data-theme='light'])) .icon-moon {
+        display: none;
+      }
+
+      :global(html[data-theme='light']) .icon-sun {
+        display: none;
+      }
+
+      .support {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        height: 2.25rem;
+        padding: 0 0.8rem;
+        border-radius: var(--radius-m);
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+        font-family: var(--font-code);
+        font-weight: 600;
+        font-size: 0.84rem;
+        text-decoration: none;
+        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+      }
+
+      .support:hover {
+        background: var(--mask);
+        color: var(--mask-ink);
+        border-color: var(--mask);
+        text-decoration: none;
+      }
+
+      main {
+        padding-block: 2.25rem 4.5rem;
+        min-height: 68vh;
+      }
+
+      main.wide {
+        width: min(1380px, 100% - 2.5rem);
+      }
+
+      .site-footer {
+        border-top: 1px solid var(--line);
+        color: var(--ink-soft);
+        font-size: 0.92rem;
+        background: var(--bg-subtle);
+      }
+
+      .foot {
+        padding-block: 2.75rem 1.75rem;
+        display: grid;
+        grid-template-columns: 2.2fr 1fr 1fr;
+        gap: 2.5rem;
+      }
+
+      .foot h2 {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink);
+        margin-bottom: 0.75rem;
+      }
+
+      .foot ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .foot .about p {
+        margin-top: 0.75rem;
+        max-width: 36rem;
+        line-height: 1.6;
+      }
+
+      .foot-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin-top: 0.85rem;
+      }
+
+      .foot a:not(.logo) {
+        color: var(--ink-soft);
+        text-decoration: none;
+      }
+
+      .foot a:not(.logo):hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+
+      .legal {
+        padding-block: 1.1rem 2rem;
+        font-size: 0.83rem;
+        border-top: 1px solid var(--line);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0.5rem 1.5rem;
+      }
+
+      .legal-right {
+        font-family: var(--font-code);
+        color: var(--ink-muted);
+      }
+
+      @media (max-width: 900px) {
+        .hbar {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          grid-template-areas:
+            'brand right'
+            'nav nav'
+            'search search';
+          gap: 0.55rem 1rem;
+        }
+        .brand-group {
+          grid-area: brand;
+        }
+        nav {
+          grid-area: nav;
+          overflow-x: auto;
+          padding-bottom: 0.15rem;
+        }
+        .right {
+          grid-area: right;
+          justify-self: end;
+          margin: 0 !important;
+        }
+        .header-search {
+          grid-area: search;
+          width: 100%;
+          margin: 0;
+        }
+        .support span {
+          display: none;
+        }
+        .support {
+          padding: 0;
+          width: 2.25rem;
+          justify-content: center;
+        }
+        .foot {
+          grid-template-columns: 1fr 1fr;
+        }
+        .foot .about {
+          grid-column: 1 / -1;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .local-pill {
+          display: none;
+        }
+        .foot {
+          grid-template-columns: 1fr;
+          gap: 1.75rem;
+        }
+      }
+
+      .kofi-float {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1.25rem;
+        z-index: 25;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: var(--surface-2);
+        color: var(--ink);
+        border: 1px solid var(--line-strong);
+        font-family: var(--font-code);
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 0.5rem 0.9rem;
+        border-radius: 9999px;
+        box-shadow: var(--shadow-md);
+        text-decoration: none;
+        transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease;
+      }
+
+      .kofi-float svg {
+        color: var(--mask);
+      }
+
+      .kofi-float:hover {
+        transform: translateY(-2px);
+        border-color: var(--mask);
+        background: var(--surface-hover);
+        color: var(--ink);
+        text-decoration: none;
+      }
+
+      @media (max-width: 640px) {
+        .kofi-float span {
+          display: none;
+        }
+        .kofi-float {
+          padding: 0.6rem;
+          bottom: 1rem;
+          right: 1rem;
+        }
+      }
+    </style>
+    {kofi && (
+      <a class="kofi-float" href={kofi} target="_blank" rel="noopener" aria-label="Support on Ko-fi" title="Support on Ko-fi">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 5h13a3 3 0 0 1 0 6h-.3A6 6 0 0 1 11 16H9a6 6 0 0 1-6-6V6a1 1 0 0 1 1-1Zm13 4a1 1 0 0 0 0-2v2ZM3 19h15v2H3z"/></svg>
+        <span>Support on Ko-fi</span>
+      </a>
+    )}
+  </body>
+</html>

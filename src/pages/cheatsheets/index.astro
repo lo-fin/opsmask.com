@@ -1,0 +1,109 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+const items = (await getCollection('cheatsheets')).sort((a, b) => a.data.title.localeCompare(b.data.title));
+---
+<Base title="Cheatsheets" description="Copy-ready command cheatsheets for kubectl, PromQL, openssl and more." wide>
+  <header class="page-head">
+    <span class="badge badge-accent">Production Command References</span>
+    <h1>CLI &amp; Query Cheatsheets</h1>
+    <p class="muted">Copy-ready commands for production incidents and debugging. Every code block includes a one-click copy button.</p>
+  </header>
+
+  <ul class="cs">
+    {items.map((c) => (
+      <li class="card">
+        <a href={`/cheatsheets/${c.id}/`}>
+          <div class="card-top">
+            <span class="badge">Cheatsheet</span>
+            <span class="arrow" aria-hidden="true">→</span>
+          </div>
+          <h2>{c.data.title}</h2>
+          <p>{c.data.description}</p>
+          <div class="tags">
+            {c.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+          </div>
+        </a>
+      </li>
+    ))}
+  </ul>
+</Base>
+
+<style>
+  .page-head {
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .page-head h1 {
+    margin: 0.45rem 0 0.35rem;
+  }
+  .page-head p {
+    margin: 0;
+  }
+  .cs {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+    gap: 1.1rem;
+  }
+  .card a {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1.25rem 1.35rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-l);
+    color: var(--ink);
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+  .card a:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-md);
+  }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.65rem;
+  }
+  .arrow {
+    font-family: var(--font-code);
+    color: var(--ink-muted);
+    transition: transform 150ms ease, color 150ms ease;
+  }
+  .card a:hover .arrow {
+    transform: translateX(3px);
+    color: var(--accent);
+  }
+  .card h2 {
+    font-size: 1.1rem;
+    margin: 0 0 0.45rem;
+  }
+  .card p {
+    margin: 0 0 0.9rem;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    flex: 1;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .tag {
+    font-family: var(--font-code);
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+  }
+</style>

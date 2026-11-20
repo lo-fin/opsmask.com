@@ -1,0 +1,127 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const sample = `apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer
+  namespace: prod
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deployer
+  namespace: prod
+subjects:
+  - kind: ServiceAccount
+    name: github-actions
+    namespace: ci
+  - kind: Group
+    name: 4f1c2e3d-aaaa-bbbb-cccc-1234567890ab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oncall-view
+subjects:
+  - kind: Group
+    name: system:authenticated
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+`;
+---
+<ToolShell slug="k8s-rbac-explainer">
+  <div>
+    <div class="row">
+      <label for="src">Roles, ClusterRoles and their bindings (YAML)</label>
+      <button class="btn ghost" type="button" id="load-sample">Load example</button>
+    </div>
+    <textarea id="src" class="code tall" spellcheck="false"></textarea>
+    <p id="err" class="status-err" aria-live="polite"></p>
+  </div>
+  <div id="out" class="out-wrap"></div>
+  <script type="application/json" id="sample" set:html={JSON.stringify(sample).replace(/</g, '\\u003c')}></script>
+
+  <div slot="notes" class="prose">
+    <h2>How RBAC scope works</h2>
+    <p>A <strong>Role</strong> lives in one namespace. A <strong>ClusterRole</strong> is a reusable set of rules. What matters is the binding: a <strong>RoleBinding</strong> grants the role inside its own namespace, even when it points at a ClusterRole; a <strong>ClusterRoleBinding</strong> grants it in every namespace and on cluster-scoped objects such as nodes.</p>
+    <h2>Permissions that are worth more than they look</h2>
+    <p><code>list</code> on Secrets returns their values, not just names. Creating pods or Deployments lets someone mount any Secret or service account in the namespace. <code>pods/exec</code>, <code>escalate</code>, <code>bind</code>, <code>impersonate</code> and <code>nodes/proxy</code> are all paths to more access.</p>
+    <pre><code set:text={`kubectl auth can-i --list --as=system:serviceaccount:ci:github-actions -n prod
+kubectl auth can-i get secrets --as=jane@example.com -n prod`} /></pre>
+  </div>
+</ToolShell>
+
+<script>
+  import yaml from 'js-yaml';
+  import { explainRbac, BUILT_IN, type Risk } from '../../lib/k8s-rbac';
+  const src = document.getElementById('src') as HTMLTextAreaElement;
+  const out = document.getElementById('out')!;
+  const err = document.getElementById('err')!;
+  const esc = (s: string) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+  const risks = (rs: Risk[]) => rs.length ? `<ul class="risks">${rs.map((r) => `<li class="risk-${r.level}">${r.level === 'high' ? 'High risk' : 'Note'}: ${esc(r.text)}</li>`).join('')}</ul>` : '';
+
+  function run() {
+    err.textContent = ''; out.innerHTML = '';
+    if (!src.value.trim()) return;
+    let docs: unknown[];
+    try { docs = yaml.loadAll(src.value); } catch (e) { err.textContent = `YAML error: ${(e as Error).message.split('\n')[0]}`; return; }
+    const { roles, bindings, access } = explainRbac(docs);
+    if (!roles.length && !bindings.length) { err.textContent = 'No Role, ClusterRole, RoleBinding or ClusterRoleBinding found.'; return; }
+
+    const sections: string[] = [];
+    if (access.length) sections.push(`<h2>Who can do what</h2>` + access.map((a) => `
+      <div class="card"><h3>${esc(a.subject)}</h3><ul>${a.grants.map((g) => `
+        <li><code>${esc(g.role)}</code> in ${esc(g.scope)}${g.known ? '' : ' <span class="muted">(role not in the pasted YAML)</span>'}
+          ${g.role.startsWith('ClusterRole/') && BUILT_IN[g.role.slice(12)] ? `<br><span class="muted">${esc(BUILT_IN[g.role.slice(12)])}</span>` : ''}
+          ${risks(g.risks)}</li>`).join('')}</ul></div>`).join(''));
+    if (roles.length) sections.push(`<h2>Roles</h2>` + roles.map((r) => `
+      <div class="card"><h3>${esc(r.id)}</h3><p class="muted">Scope: ${esc(r.scope)}.${r.aggregated ? ' Aggregated: its rules are filled in from other ClusterRoles by label.' : ''}</p>
+        <ul>${r.rules.map((x) => `<li>${esc(x.text)}${risks(x.risks)}</li>`).join('') || '<li class="muted">No rules.</li>'}</ul></div>`).join(''));
+    if (bindings.length) sections.push(`<h2>Bindings</h2>` + bindings.map((b) => `
+      <div class="card"><h3>${esc(b.id)}</h3>
+        <p>Grants <code>${esc(b.role)}</code> in ${esc(b.scope)} to ${b.subjects.map((s) => `${esc(s.kind)} <code>${esc(s.namespace ? `${s.namespace}/${s.name}` : s.name)}</code>`).join(', ') || 'nobody'}.</p>
+        ${risks(b.risks)}</div>`).join(''));
+    out.innerHTML = sections.join('');
+  }
+  src.addEventListener('input', run);
+  // Other tools link here with the YAML in the hash, which never leaves the browser.
+  if (location.hash.startsWith('#yaml=')) {
+    try { src.value = decodeURIComponent(location.hash.slice(6)); run(); } catch {}
+  }
+  document.getElementById('load-sample')!.addEventListener('click', () => {
+    src.value = JSON.parse(document.getElementById('sample')!.textContent!);
+    run();
+  });
+</script>
+
+<style>
+  .tall { min-height: 16rem; }
+  .row { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 0.35rem; }
+  .row label { margin: 0; }
+  .row .btn { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  .out-wrap :global(h2) { font-size: 1.15rem; margin: 1rem 0 0.5rem; }
+  .out-wrap :global(.card) { background: var(--surface); border-radius: var(--radius-m); padding: 0.75rem 1rem; margin-bottom: 0.6rem; }
+  .out-wrap :global(.card h3) { font-size: 1rem; margin: 0 0 0.35rem; }
+  .out-wrap :global(.card p) { margin: 0 0 0.35rem; }
+  .out-wrap :global(.card > ul) { margin: 0; padding-left: 1.1rem; }
+  .out-wrap :global(.card li) { margin-bottom: 0.3rem; }
+  .out-wrap :global(.risks) { list-style: none; padding: 0; margin: 0.2rem 0 0; font-size: 0.9rem; }
+  .out-wrap :global(.risk-high) { color: var(--err); font-weight: 700; }
+  .out-wrap :global(.risk-medium) { color: var(--warn); }
+</style>

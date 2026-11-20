@@ -1,0 +1,75 @@
+---
+import ToolShell from '../../components/ToolShell.astro';
+const presets = ['*/5 * * * *', '0 * * * *', '0 2 * * *', '0 9 * * 1-5', '0 0 1 * *', '@weekly'];
+---
+<ToolShell slug="cron-explainer">
+  <div>
+    <label for="cron">Cron expression</label>
+    <input id="cron" type="text" class="code big" value="0 2 * * 1-5" spellcheck="false" />
+    <p class="presets">
+      {presets.map((p) => <button type="button" class="btn ghost preset" data-expr={p}><code>{p}</code></button>)}
+    </p>
+  </div>
+  <p id="cron-desc" class="desc" aria-live="polite"></p>
+  <div class="table-wrap"><table id="cron-fields"></table></div>
+  <section>
+    <div class="runs-head">
+      <h2>Next runs</h2>
+      <label class="check"><input type="radio" name="tz" value="utc" checked /> UTC</label>
+      <label class="check"><input type="radio" name="tz" value="local" /> Local time</label>
+    </div>
+    <ol id="cron-runs" class="runs"></ol>
+  </section>
+
+  <div slot="notes" class="prose">
+    <h2>Kubernetes CronJob time zones</h2>
+    <p>A CronJob uses the time zone of the kube-controller-manager, which is UTC on AKS, EKS and GKE. Since Kubernetes 1.27 you can set <code>spec.timeZone</code>, for example <code>Europe/London</code>, so the schedule follows daylight saving.</p>
+    <p>When both day of month and day of week are set, cron runs when either one matches, not both.</p>
+  </div>
+</ToolShell>
+
+<script>
+  import { parseCron, describe, describeField, nextRuns, FIELDS } from '../../lib/cron';
+  const input = document.getElementById('cron') as HTMLInputElement;
+  const desc = document.getElementById('cron-desc')!;
+  const fieldsEl = document.getElementById('cron-fields')!;
+  const runsEl = document.getElementById('cron-runs')!;
+
+  function run() {
+    const utc = (document.querySelector('input[name="tz"]:checked') as HTMLInputElement).value === 'utc';
+    try {
+      const p = parseCron(input.value);
+      desc.className = 'desc';
+      desc.textContent = describe(p);
+      fieldsEl.innerHTML = `<tbody>${p.fields
+        .map((f, i) => `<tr><th>${FIELDS[i].name}</th><td><code>${f.raw.replace(/</g, '&lt;')}</code></td><td>${describeField(f, i)}</td></tr>`)
+        .join('')}</tbody>`;
+      const runs = nextRuns(p, 6, utc);
+      runsEl.innerHTML = runs.length
+        ? runs.map((d) => `<li>${utc ? d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} <span class="muted">${d.toLocaleDateString('en', { weekday: 'short', timeZone: utc ? 'UTC' : undefined })}</span></li>`).join('')
+        : '<li>No run in the next five years. Check day and month, for example 31 February.</li>';
+    } catch (e) {
+      desc.className = 'desc status-err';
+      desc.textContent = (e as Error).message;
+      fieldsEl.innerHTML = runsEl.innerHTML = '';
+    }
+  }
+  input.addEventListener('input', run);
+  document.querySelectorAll('input[name="tz"]').forEach((el) => el.addEventListener('change', run));
+  document.querySelectorAll<HTMLButtonElement>('.preset').forEach((b) =>
+    b.addEventListener('click', () => { input.value = b.dataset.expr!; run(); }),
+  );
+  run();
+</script>
+
+<style is:global>
+  #cron { font-size: 1.3rem; padding: 0.7rem 0.9rem; max-width: 28rem; }
+  .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+  .preset { padding: 0.2rem 0.55rem; font-weight: 400; }
+  .preset code { background: none; padding: 0; }
+  .desc { font-size: 1.35rem; font-weight: 700; margin: 0; }
+  .runs-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; }
+  .runs-head h2 { margin-right: 1rem; }
+  .runs { font-family: var(--font-code); font-size: 0.95rem; padding-left: 1.5rem; }
+  .runs li { padding: 0.2rem 0; }
+</style>
